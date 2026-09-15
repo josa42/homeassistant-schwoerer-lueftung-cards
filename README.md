@@ -68,8 +68,6 @@ cards work out their entities from it, and name themselves.
 
 [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=josa42&repository=homeassistant-schwoerer-lueftung-cards&category=plugin)
 
-Confirm the prompt, click Download, then hard refresh the browser.
-
 [Manual installation](docs/manual_installation.md) covers adding the repository
 by hand and installing without HACS.
 
