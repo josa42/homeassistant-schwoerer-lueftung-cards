@@ -13,8 +13,9 @@
   position against the `entity_type` state attribute the integration sets, so
   renaming an entity does not break it and one config works on any WGT unit.
   Individual positions can still be overridden.
-- **Visual editor.** Pick the WGT device from a device picker; everything else
-  has a working default.
+- **Visual editor.** Pick the device, and that is the entire configuration.
+  Both cards work everything else out from it, so there is no card title, no
+  name and no per-entity override to get wrong.
 - **WGT Raum card.** The state of a single room in the same visual language:
   supply air arriving, the room's measured and target temperature side by side,
   the auxiliary heater with its own state, and how far the room sits from its

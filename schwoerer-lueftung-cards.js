@@ -220,7 +220,6 @@ const HEAT_PUMP_LABELS = { off: "aus", heating: "heizt", cooling: "kühlt" };
 // a domain. And a room card needs a couple of readings off the main unit rather
 // than the room device, so a slot can opt out of the device filter.
 function resolveSlots(hass, slots, config) {
-  const overrides = config.sensors || {};
   const deviceId = config.device_id;
   const inDevice = {};
   const anywhere = {};
@@ -238,7 +237,7 @@ function resolveSlots(hass, slots, config) {
   for (const [slot, meta] of Object.entries(slots)) {
     const key = meta.domain ? `${meta.type}|${meta.domain}` : meta.type;
     const pool = meta.global || !deviceId ? anywhere : inDevice;
-    out[slot] = overrides[slot] || config[slot] || pool[key] || null;
+    out[slot] = pool[key] || null;
   }
   return out;
 }
@@ -276,7 +275,7 @@ class WgtAirFlowCard extends HTMLElement {
   }
 
   setConfig(config) {
-    this._config = { title: "WGT Temperaturen", ...config };
+    this._config = { ...config };
     this._resolved = null;
     this._signature = null;
     this._dotSig = null;
@@ -295,8 +294,8 @@ class WgtAirFlowCard extends HTMLElement {
     this._render();
   }
 
-  // Explicit overrides win; otherwise match `entity_type` within the chosen
-  // device. Cached, and rebuilt whenever a resolved entity goes missing.
+  // Matched by `entity_type` within the chosen device. Cached, and rebuilt
+  // whenever a resolved entity goes missing.
   _entities() {
     const stale =
       this._resolved &&
@@ -524,7 +523,6 @@ class WgtAirFlowCard extends HTMLElement {
         </div>
       </ha-card>`;
 
-    this._card = this.querySelector("ha-card");
     this._svgEl = this.querySelector("svg");
     this._dotsEl = this.querySelector("[data-dots]");
     this._hpDotsEl = this.querySelector("[data-hp-dots]");
@@ -561,9 +559,6 @@ class WgtAirFlowCard extends HTMLElement {
   _update() {
     const ids = this._entities();
     const now = this._svgEl.getCurrentTime ? this._svgEl.getCurrentTime() : 0;
-
-    if (this._config.title) this._card.setAttribute("header", this._config.title);
-    else this._card.removeAttribute("header");
 
     for (const slot of Object.keys(NODES)) {
       const v = this._num(slot);
@@ -640,17 +635,7 @@ class WgtAirFlowCardEditor extends HTMLElement {
 
   _schema() {
     return [
-      { name: "title", selector: { text: {} } },
       { name: "device_id", selector: { device: { integration: "schwoerer_lueftung" } } },
-      {
-        name: "sensors",
-        type: "expandable",
-        title: "Fühler einzeln überschreiben",
-        schema: Object.keys(SLOTS).map((slot) => ({
-          name: slot,
-          selector: { entity: { integration: "schwoerer_lueftung" } },
-        })),
-      },
     ];
   }
 
@@ -658,23 +643,11 @@ class WgtAirFlowCardEditor extends HTMLElement {
     if (!this._config || !this._hass) return;
     if (!this._form) {
       this._form = document.createElement("ha-form");
-      this._form.computeLabel = (s) => {
-        const meta = SLOTS[s.name];
-        if (meta) return meta.tag ? `${meta.tag} · ${meta.label}` : meta.label;
-        return { title: "Titel", device_id: "WGT-Gerät",
-                 sensors: "Fühler einzeln überschreiben" }[s.name] || s.name;
-      };
+      this._form.computeLabel = (s) =>
+        ({ device_id: "WGT-Gerät" })[s.name] || s.name;
       this._form.addEventListener("value-changed", (ev) => {
         ev.stopPropagation();
         const next = { ...ev.detail.value };
-        // ha-form hands back empty strings for cleared pickers; drop them so
-        // the slot falls back to entity_type resolution again.
-        if (next.sensors) {
-          next.sensors = Object.fromEntries(
-            Object.entries(next.sensors).filter(([, v]) => v)
-          );
-          if (!Object.keys(next.sensors).length) delete next.sensors;
-        }
         if (!next.device_id) delete next.device_id;
         this.dispatchEvent(
           new CustomEvent("config-changed", {
@@ -727,21 +700,30 @@ const ROOM_SLOTS = {
   },
 };
 
-const ROOM_W = 820;
-const ROOM_H = 320;
-const ROOM_DUCT_Y = 84;
-const ROOM_BOX = { x: 130, y: 26, w: 560, h: 268 };
+// Half the air flow card's viewBox width, because a room card sits in one
+// column of a two-column view while that one spans both. Equal type sizes only
+// render equal if the two cards scale by the same factor.
+const ROOM_W = 580;
+const ROOM_H = 268;
+const ROOM_DUCT_Y = 78;
+const ROOM_BOX = { x: 90, y: 20, w: 400, h: 228 };
+// The room name and the two stream captions share this baseline.
+const ROOM_TITLE_Y = ROOM_BOX.y + 22;
 const ROOM_ZONES = [
-  { x: 0, y: 26, w: 100, h: 268 },
-  { x: 720, y: 26, w: 100, h: 268 },
+  { x: 0, y: 20, w: 70, h: 228 },
+  { x: 510, y: 20, w: 70, h: 228 },
 ];
-const ROOM_DUCT = "M56,84 L764,84";
-const ROOM_DUCT_LEN = 708;
-const ROOM_COIL = { x: 210, y: ROOM_DUCT_Y, r: 20 };
-const ROOM_NODE = { w: 150, h: 90 };
+const ROOM_CAP = { left: 35, right: 545 };
+const ROOM_DUCT = "M41,78 L539,78";
+const ROOM_DUCT_LEN = 498;
+const ROOM_COIL = { x: 140, y: ROOM_DUCT_Y, r: 16 };
+const ROOM_NODE = { w: 92, h: 58 };
+// Centred in the space the Zusatzheizung column leaves, not in the box as a
+// whole: that column runs to about x=188, so equal gaps either side of the pair
+// put it here rather than hard against the right edge.
 const ROOM_NODES = {
-  current_temperature: { x: 390, y: 195, tag: "IST", label: "Raumtemperatur" },
-  climate: { x: 580, y: 195, tag: "SOLL", label: "Solltemperatur" },
+  current_temperature: { x: 277, y: 165, tag: "IST", label: "Raumtemperatur" },
+  climate: { x: 402, y: 165, tag: "SOLL", label: "Solltemperatur" },
 };
 
 class WgtRoomCard extends HTMLElement {
@@ -853,7 +835,7 @@ class WgtRoomCard extends HTMLElement {
           .housing { fill: var(--divider-color); fill-opacity: .12;
                      stroke: var(--secondary-text-color); stroke-width: 1.2;
                      stroke-opacity: .4; }
-          .room-title { fill: var(--primary-text-color); font-size: 15px;
+          .room-title { fill: var(--primary-text-color); font-size: 14px;
                         font-weight: 500; opacity: .85; }
           .duct { stroke: var(--divider-color); stroke-width: 15; fill: none;
                   stroke-linecap: round; opacity: .55; }
@@ -864,10 +846,10 @@ class WgtRoomCard extends HTMLElement {
                   stroke-dasharray: 4 3; }
           .coil.on { stroke-dasharray: none; }
           .tag { fill: var(--secondary-text-color); font-size: 13px; text-anchor: middle; }
-          .val { fill: var(--primary-text-color); font-size: 28px; font-weight: 500;
+          .val { fill: var(--primary-text-color); font-size: 19px; font-weight: 500;
                  text-anchor: middle; }
           .label { fill: var(--secondary-text-color); font-size: 14px; text-anchor: middle; }
-          .coil-tag { fill: var(--secondary-text-color); font-size: 12px; font-weight: 500;
+          .coil-tag { fill: var(--secondary-text-color); font-size: 13px; font-weight: 500;
                       text-anchor: middle; }
           .caption { fill: var(--primary-text-color); font-size: 13px; font-weight: 500;
                      text-anchor: middle; letter-spacing: 1.2px; opacity: .8; }
@@ -886,50 +868,49 @@ class WgtRoomCard extends HTMLElement {
             ).join("")}
             <rect x="${ROOM_BOX.x}" y="${ROOM_BOX.y}" width="${ROOM_BOX.w}"
                   height="${ROOM_BOX.h}" rx="20" class="housing"/>
-            <text x="${ROOM_BOX.x + 22}" y="${ROOM_BOX.y + 26}" class="room-title" data-room-title></text>
+            <text x="${ROOM_BOX.x + 18}" y="${ROOM_TITLE_Y}" class="room-title" data-room-title></text>
 
             <path d="${ROOM_DUCT}" class="duct"/>
             <path d="${ROOM_DUCT}" class="line"/>
             <g data-dots></g>
 
-            <circle cx="50" cy="${ROOM_DUCT_Y}" r="6" class="cap"/>
-            <circle cx="770" cy="${ROOM_DUCT_Y}" r="6" class="cap"/>
-            <text x="50" y="${ROOM_DUCT_Y - 36}" class="caption">ZULUFT</text>
-            <text x="770" y="${ROOM_DUCT_Y - 36}" class="caption">ABLUFT</text>
-            <text x="50" y="${ROOM_DUCT_Y + 46}" class="sub" data-supply-air></text>
+            <circle cx="${ROOM_CAP.left}" cy="${ROOM_DUCT_Y}" r="6" class="cap"/>
+            <circle cx="${ROOM_CAP.right}" cy="${ROOM_DUCT_Y}" r="6" class="cap"/>
+            <text x="${ROOM_CAP.left}" y="${ROOM_TITLE_Y}" class="caption">ZULUFT</text>
+            <text x="${ROOM_CAP.right}" y="${ROOM_TITLE_Y}" class="caption">ABLUFT</text>
+            <text x="${ROOM_CAP.left}" y="${ROOM_DUCT_Y + 38}" class="sub" data-supply-air></text>
 
             <g class="node" data-slot="aux_active">
-              <rect x="${ROOM_COIL.x - 70}" y="${ROOM_COIL.y + 24}" width="140" height="52" class="hit"/>
+              <rect x="${ROOM_COIL.x - 56}" y="${ROOM_COIL.y + 20}" width="112" height="40" class="hit"/>
               <circle cx="${ROOM_COIL.x}" cy="${ROOM_COIL.y}" r="${ROOM_COIL.r}" class="coil"
                       data-coil stroke="var(--disabled-text-color, #bdbdbd)"/>
               <text x="${ROOM_COIL.x}" y="${ROOM_COIL.y + 4}" class="coil-tag">ZH</text>
-              <text x="${ROOM_COIL.x}" y="${ROOM_COIL.y + 44}" class="label">Zusatzheizung</text>
-              <text x="${ROOM_COIL.x}" y="${ROOM_COIL.y + 62}" class="sub" data-aux></text>
+              <text x="${ROOM_COIL.x}" y="${ROOM_COIL.y + 34}" class="label">Zusatzheizung</text>
+              <text x="${ROOM_COIL.x}" y="${ROOM_COIL.y + 52}" class="sub" data-aux></text>
             </g>
 
             <g class="node" data-slot="scheduled">
-              <rect x="${ROOM_COIL.x - 70}" y="${ROOM_COIL.y + 70}" width="140" height="24" class="hit"/>
-              <text x="${ROOM_COIL.x}" y="${ROOM_COIL.y + 86}" class="sub" data-scheduled></text>
+              <rect x="${ROOM_COIL.x - 56}" y="${ROOM_COIL.y + 58}" width="112" height="22" class="hit"/>
+              <text x="${ROOM_COIL.x}" y="${ROOM_COIL.y + 74}" class="sub" data-scheduled></text>
             </g>
 
             ${Object.entries(ROOM_NODES).map(
               ([slot, n]) => `<g class="node" data-slot="${slot}">
                 <rect x="${n.x - ROOM_NODE.w / 2}" y="${n.y - ROOM_NODE.h / 2}"
-                      width="${ROOM_NODE.w}" height="${ROOM_NODE.h}" rx="16" class="ring"/>
-                <text x="${n.x}" y="${n.y - 16}" class="tag">${n.tag}</text>
-                <text x="${n.x}" y="${n.y + 18}" class="val"></text>
-                <text x="${n.x}" y="${n.y + ROOM_NODE.h / 2 + 20}" class="label">${n.label}</text>
+                      width="${ROOM_NODE.w}" height="${ROOM_NODE.h}" rx="13" class="ring"/>
+                <text x="${n.x}" y="${n.y - 8}" class="tag">${n.tag}</text>
+                <text x="${n.x}" y="${n.y + 13}" class="val"></text>
+                <text x="${n.x}" y="${n.y + ROOM_NODE.h / 2 + 18}" class="label">${n.label}</text>
               </g>`
             ).join("")}
 
             <text x="${(ROOM_NODES.current_temperature.x + ROOM_NODES.climate.x) / 2}"
-                  y="286" class="sub" data-delta></text>
+                  y="${ROOM_BOX.y + ROOM_BOX.h - 14}" class="sub" data-delta></text>
           </svg>
           <div class="warn" hidden>Kein Raum gewählt – bitte im Karten-Editor ein Raumgerät auswählen.</div>
         </div>
       </ha-card>`;
 
-    this._card = this.querySelector("ha-card");
     this._svgEl = this.querySelector("svg");
     this._dotsEl = this.querySelector("[data-dots]");
     this._warnEl = this.querySelector(".warn");
@@ -957,7 +938,6 @@ class WgtRoomCard extends HTMLElement {
   // The area is what the user actually calls the room. Fall back to the
   // thermostat's name with the integration's own prefix and suffix stripped.
   _roomName() {
-    if (this._config.name) return this._config.name;
     const ids = this._entities();
     const id = ids.climate || ids.current_temperature;
     if (!id) return "Raum";
@@ -980,10 +960,7 @@ class WgtRoomCard extends HTMLElement {
     const now = this._svgEl.getCurrentTime ? this._svgEl.getCurrentTime() : 0;
 
     const climate = ids.climate && this._hass.states[ids.climate];
-    const roomName = this._roomName();
-    if (this._config.title) this._card.setAttribute("header", this._config.title);
-    else this._card.removeAttribute("header");
-    this._q("[data-room-title]").textContent = roomName;
+    this._q("[data-room-title]").textContent = this._roomName();
 
     for (const slot of Object.keys(ROOM_SLOTS)) {
       const g = this._nodeEls[slot];
@@ -1071,21 +1048,11 @@ class WgtRoomCardEditor extends HTMLElement {
     if (!this._form) {
       this._form = document.createElement("ha-form");
       this._form.computeLabel = (sch) =>
-        ROOM_SLOTS[sch.name]?.label ||
-        { title: "Titel", name: "Name", device_id: "Raumgerät",
-          sensors: "Entitäten einzeln überschreiben" }[sch.name] ||
-        sch.name;
+        ({ device_id: "Raumgerät" })[sch.name] || sch.name;
       this._form.addEventListener("value-changed", (ev) => {
         ev.stopPropagation();
         const next = { ...ev.detail.value };
-        if (next.sensors) {
-          next.sensors = Object.fromEntries(
-            Object.entries(next.sensors).filter(([, v]) => v)
-          );
-          if (!Object.keys(next.sensors).length) delete next.sensors;
-        }
         if (!next.device_id) delete next.device_id;
-        if (!next.name) delete next.name;
         this.dispatchEvent(
           new CustomEvent("config-changed", {
             detail: { config: next },
@@ -1098,18 +1065,7 @@ class WgtRoomCardEditor extends HTMLElement {
     }
     this._form.hass = this._hass;
     this._form.schema = [
-      { name: "title", selector: { text: {} } },
-      { name: "name", selector: { text: {} } },
       { name: "device_id", selector: { device: { integration: "schwoerer_lueftung" } } },
-      {
-        name: "sensors",
-        type: "expandable",
-        title: "Entitäten einzeln überschreiben",
-        schema: Object.keys(ROOM_SLOTS).map((slot) => ({
-          name: slot,
-          selector: { entity: { integration: "schwoerer_lueftung" } },
-        })),
-      },
     ];
     this._form.data = this._config;
   }

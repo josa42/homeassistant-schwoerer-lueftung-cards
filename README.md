@@ -59,9 +59,6 @@ device_id: 28d672dcbceff92601287789cdffb7bb
 |--------|------|---------|-------------|
 | `type` | string | required | `custom:wgt-room-card` |
 | `device_id` | string | auto | The room device. The visual editor fills this in. |
-| `name` | string | the area | Overrides the room name drawn on the card. |
-| `title` | string | none | Card header. Usually unwanted, since the room name is already on the card. |
-| `sensors` | map | `{}` | Per-slot entity overrides, as above. |
 
 Two of its slots deliberately read from the main unit rather than the room:
 the Zuluft temperature (T4) and the air performance that sets the dot speed.
@@ -135,8 +132,9 @@ sections:
 |--------|------|---------|-------------|
 | `type` | string | required | `custom:wgt-air-flow-card` |
 | `device_id` | string | auto | The WGT device. The visual editor fills this in. |
-| `title` | string | `WGT Temperaturen` | Card header. Set to `null` to hide it. |
-| `sensors` | map | `{}` | Per-slot entity overrides. See below. |
+
+That is the whole configuration. Everything else the card needs it works out
+from the device.
 
 ### How sensors are found
 
@@ -147,14 +145,7 @@ that the integration sets on every one of its entities.
 This means renaming an entity does not break the card, and the same card config
 works on any WGT unit.
 
-Override a single position only if the automatic match is wrong:
-
-```yaml
-type: custom:wgt-air-flow-card
-device_id: 1642a8c262a6172354e757a7be8f2f48
-sensors:
-  outdoor: sensor.my_own_outdoor_temperature
-```
+The positions it fills:
 
 | Slot | `entity_type` | Shown as |
 |------|---------------|----------|
