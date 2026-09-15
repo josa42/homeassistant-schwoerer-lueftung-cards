@@ -1,4 +1,4 @@
-const CARD_VERSION = "0.0.0";
+const CARD_VERSION = "1.0.0";
 
 // Which build is loaded is the first question on any bug report, and a card has
 // nowhere else to say so. scripts/release.sh keeps this in step with the tag.
