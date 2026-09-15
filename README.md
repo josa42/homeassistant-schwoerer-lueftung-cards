@@ -80,10 +80,6 @@ by hand and installing without HACS.
 - [Reference](docs/reference.md): which entity fills which position, and troubleshooting
 - [Changelog](CHANGELOG.md)
 
-The recordings above show a winter state at fan level 3 with the heat pump
-running. Regenerate them with `npm run preview`, which needs `librsvg` and
-`imagemagick`.
-
 <br><br>
 
 ## License
