@@ -78,28 +78,17 @@ Neither exists on a room device.
 
 ## Installation
 
-### HACS
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=josa42&repository=homeassistant-schwoerer-lueftung-cards&category=plugin)
 
-1. Open HACS
-2. Click the three dots menu (top right) → Custom repositories
-3. Add repository URL: `https://github.com/josa42/homeassistant-schwoerer-lueftung-cards`
-4. Category: `Dashboard`
-5. Click "Add", then "Download" on the Schwörer Lüftung Cards card
-6. Reload your browser with a hard refresh
+This repository is not in the HACS default store, so the button carries
+`category=plugin`. That is what lets HACS offer to add it as a custom
+repository rather than reporting it as not found.
 
-HACS registers the dashboard resource for you.
+Click the button, confirm the prompt, then Download, then reload your browser
+with a hard refresh.
 
-### Manual
-
-1. Download `schwoerer-lueftung-cards.js` from the [latest release](https://github.com/josa42/homeassistant-schwoerer-lueftung-cards/releases)
-2. Copy it to `config/www/`
-3. Add the resource under Settings → Dashboards → ⋮ → Resources:
-   - URL: `/local/schwoerer-lueftung-cards.js?v=1`
-   - Type: `JavaScript module`
-4. Reload your browser with a hard refresh
-
-Bump the `?v=` query when you replace the file, or browsers will keep serving
-the cached copy.
+Adding the repository by hand, or installing without HACS:
+[manual installation](docs/manual_installation.md).
 
 <br><br>
 
