@@ -718,12 +718,12 @@ const ROOM_DUCT = "M41,78 L539,78";
 const ROOM_DUCT_LEN = 498;
 const ROOM_COIL = { x: 140, y: ROOM_DUCT_Y, r: 16 };
 const ROOM_NODE = { w: 92, h: 58 };
-// Centred in the space the Zusatzheizung column leaves, not in the box as a
-// whole: that column runs to about x=188, so equal gaps either side of the pair
-// put it here rather than hard against the right edge.
+// Centred on the room box: 228 + 352 = 580, twice the box centre of 290. Only
+// possible because the Zusatzheizung text above ends at y=133, clear of the
+// nodes' band, and the time program line moved down to the bottom row.
 const ROOM_NODES = {
-  current_temperature: { x: 277, y: 165, tag: "IST", label: "Raumtemperatur" },
-  climate: { x: 402, y: 165, tag: "SOLL", label: "Solltemperatur" },
+  current_temperature: { x: 228, y: 165, tag: "IST", label: "Raumtemperatur" },
+  climate: { x: 352, y: 165, tag: "SOLL", label: "Solltemperatur" },
 };
 
 class WgtRoomCard extends HTMLElement {
@@ -890,8 +890,10 @@ class WgtRoomCard extends HTMLElement {
             </g>
 
             <g class="node" data-slot="scheduled">
-              <rect x="${ROOM_COIL.x - 56}" y="${ROOM_COIL.y + 58}" width="112" height="22" class="hit"/>
-              <text x="${ROOM_COIL.x}" y="${ROOM_COIL.y + 74}" class="sub" data-scheduled></text>
+              <rect x="${ROOM_COIL.x - 56}" y="${ROOM_BOX.y + ROOM_BOX.h - 30}"
+                    width="112" height="22" class="hit"/>
+              <text x="${ROOM_COIL.x}" y="${ROOM_BOX.y + ROOM_BOX.h - 14}"
+                    class="sub" data-scheduled></text>
             </g>
 
             ${Object.entries(ROOM_NODES).map(
