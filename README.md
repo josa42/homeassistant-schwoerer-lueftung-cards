@@ -31,11 +31,13 @@ performance value opens its more-info dialog with history.
 The recording above shows a winter state at fan level 3, with the heat pump
 heating, so that the colour scale and the heat transfer direction are both
 visible. Regenerate it after changing the card with `npm run preview`, which
-needs `librsvg` and `imagemagick`.
+needs `librsvg` and `imagemagick`. It regenerates both cards' recordings.
 
 <br><br>
 
 ## WGT Raum
+
+![The WGT Raum card, showing supply air reaching a room below its setpoint](assets/wgt-room-card.gif)
 
 The state of one room, in the same visual language. Supply air arrives from the
 unit on the left, passes the room's auxiliary heating coil, and leaves as

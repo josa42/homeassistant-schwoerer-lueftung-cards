@@ -1,4 +1,4 @@
-// Renders the card's animation to a frame sequence by computing each dot's
+// Renders each card's animation to a frame sequence by computing every dot's
 // position directly, using the same constant-velocity model the browser applies
 // for calcMode="paced". No browser or screen recording involved.
 import { readFile, writeFile, mkdir, rm } from 'node:fs/promises';
@@ -11,47 +11,16 @@ const { document, HTMLElement, customElements, CustomEvent } = parseHTML(
 Object.assign(global, { document, HTMLElement, customElements, CustomEvent });
 global.window = { customCards: [] };
 
-// A winter state: the heat pump is running, so the GIF shows the transfer
-// direction the README describes, and the air spans most of the colour scale.
-const DEV = 'wgt';
-const DEMO = {
-  temperature_t10_outdoor: '-2.0',
-  temperature_t2_after_preheating_coil: '1.5',
-  temperature_t6_in_heat_exchanger: '12.4',
-  temperature_t8_condenser: '21.0',
-  temperature_t3_before_reheater: '20.4',
-  temperature_t4_after_reheater: '22.0',
-  temperature_t7_evaporator: '4.8',
-  temperature_t5_exhaust_air: '22.6',
-  heat_pump_status: 'heating',
-  bypass_state: 'closed',
-  current_supply_air_flow: '50',
-  current_exhaust_air_flow: '50',
-};
-const states = {};
-const entities = {};
-for (const [type, state] of Object.entries(DEMO)) {
-  const id = `sensor.${type}`;
-  states[id] = { state, attributes: { entity_type: type } };
-  entities[id] = { device_id: DEV };
-}
-
 await import('data:text/javascript;base64,' + Buffer.from(src).toString('base64'));
-const Card = customElements.get('wgt-air-flow-card');
-const mod = await import(
+const geo = await import(
   'data:text/javascript;base64,' +
     Buffer.from(
       src.replace(/customElements\.define\([^)]*\);/g, '') +
-        '\nexport { STREAMS, HP_LINK };'
+        '\nexport { STREAMS, HP_LINK, ROOM_DUCT, ROOM_DUCT_LEN, DOT_SPACING };'
     ).toString('base64')
 );
-const { STREAMS, HP_LINK } = mod;
 
-const card = document.createElement('div');
-Object.setPrototypeOf(card, Card.prototype);
-card.setConfig({ device_id: DEV, title: null });
-card.hass = { states, entities };
-const svgEl = card.querySelector('svg');
+const FPS = 12;
 
 // Walk a path into a dense polyline so a point can be found by arc length.
 // This is what "paced" means: distance advances at a constant rate with time.
@@ -107,35 +76,33 @@ function sampler(d) {
   };
 }
 
-const plans = STREAMS.map((s) => {
-  const speed = card._speed(s.name);
-  const count = Math.max(1, Math.round(s.len / 88));
-  return {
-    s,
-    speed,
-    count,
-    path: sampler(s.d),
-    colors: s.runs.map((r) => card._dotColor(r.from)),
-  };
-});
-
-// The pattern repeats once every dot has moved into its neighbour's place, so
-// one spacing-period is the shortest seamless loop.
-const period = plans[0].s.len / plans[0].count / plans[0].speed;
-const FPS = 12;
-const FRAMES = Math.round(period * FPS);
-console.log(`loop ${period.toFixed(3)}s, ${FRAMES} frames at ${FPS}fps`);
-for (const p of plans) {
-  const own = p.s.len / p.count / p.speed;
-  console.log(`  ${p.s.name}: ${p.count} dots, period ${own.toFixed(3)}s,`
-    + ` loop seam ${(((period % own) / own) * (p.s.len / p.count)).toFixed(1)}px`);
+// A hass stub the cards can resolve against. The entity ids are synthetic; only
+// the entity_type attribute and the device id matter to resolveSlots.
+function makeHass(entries) {
+  const states = {};
+  const entities = {};
+  for (const [type, state, attrs] of entries) {
+    const { domain = 'sensor', ...rest } = attrs || {};
+    const id = `${domain}.${type}`;
+    states[id] = { state, attributes: { entity_type: type, ...rest } };
+    entities[id] = { device_id: 'demo', area_id: 'a1' };
+  }
+  return { states, entities, areas: { a1: { name: 'Wohnzimmer' } } };
 }
 
-const hpLen = HP_LINK.bottom - HP_LINK.top;
-const hpSpeed = hpLen / (hpLen / 60);
+function mount(tag, hass) {
+  const Card = customElements.get(tag);
+  const el = document.createElement('div');
+  Object.setPrototypeOf(el, Card.prototype);
+  el.setConfig({ device_id: 'demo' });
+  el.hass = hass;
+  return el;
+}
 
 const css = src
-  .match(/<style>([\s\S]*?)<\/style>/)[1]
+  .match(/<style>[\s\S]*?<\/style>/g)
+  .map((b) => b.replace(/<\/?style>/g, ''))
+  .join('\n')
   .replace(/var\(--divider-color\)/g, '#d4d4d8')
   .replace(/var\(--secondary-text-color\)/g, '#6b7280')
   .replace(/var\(--primary-text-color\)/g, '#1f2937')
@@ -144,48 +111,138 @@ const css = src
   .replace(/var\(--info-color, #039be5\)/g, '#039be5')
   .replace(/var\(--warning-color, #ffa726\)/g, '#ffa726');
 
-const dotsG = card.querySelector('[data-dots]');
-const hpG = card.querySelector('[data-hp-dots]');
+// A winter state, so the colour scale and the heat pump's transfer direction
+// are both visible. Fan level 3 throughout.
+const AIR_FLOW = mount(
+  'wgt-air-flow-card',
+  makeHass([
+    ['temperature_t10_outdoor', '-2.0'],
+    ['temperature_t2_after_preheating_coil', '1.5'],
+    ['temperature_t6_in_heat_exchanger', '12.4'],
+    ['temperature_t8_condenser', '21.0'],
+    ['temperature_t3_before_reheater', '20.4'],
+    ['temperature_t4_after_reheater', '22.0'],
+    ['temperature_t7_evaporator', '4.8'],
+    ['temperature_t5_exhaust_air', '22.6'],
+    ['heat_pump_status', 'heating'],
+    ['bypass_state', 'closed'],
+    ['current_supply_air_flow', '50'],
+    ['current_exhaust_air_flow', '50'],
+  ])
+);
+
+// The same winter afternoon in one room: just under its setpoint, with the
+// auxiliary heater running.
+const ROOM = mount(
+  'wgt-room-card',
+  makeHass([
+    ['current_temperature_room', '20.8'],
+    ['climate_room', 'heat', { domain: 'climate', temperature: 21.5 }],
+    ['auxiliary_heating_active_room', 'on', { domain: 'binary_sensor' }],
+    ['auxiliary_heating_enabled_room', 'on', { domain: 'switch' }],
+    ['scheduled_heating_enabled_room', 'on', { domain: 'switch' }],
+    ['base_temperature_room', '21.5', { domain: 'number' }],
+    ['temperature_t4_after_reheater', '22.0'],
+    ['current_supply_air_flow', '50'],
+  ])
+);
+
+const targets = [
+  {
+    name: 'wgt-air-flow-card',
+    card: AIR_FLOW,
+    width: 1000,
+    scope: 'wgt-af',
+    plans: geo.STREAMS.map((s) => ({
+      path: sampler(s.d),
+      len: s.len,
+      stops: s.stops,
+      speed: AIR_FLOW._speed(s.name),
+      count: Math.max(1, Math.round(s.len / geo.DOT_SPACING)),
+      colors: s.runs.map((r) => AIR_FLOW._dotColor(r.from)),
+    })),
+    hp: { len: geo.HP_LINK.bottom - geo.HP_LINK.top, x: geo.HP_LINK.x, bottom: geo.HP_LINK.bottom },
+  },
+  {
+    name: 'wgt-room-card',
+    card: ROOM,
+    width: 580,
+    scope: 'wgt-room',
+    plans: [
+      {
+        path: sampler(geo.ROOM_DUCT),
+        len: geo.ROOM_DUCT_LEN,
+        stops: [geo.ROOM_DUCT_LEN],
+        speed: ROOM._speed(),
+        count: Math.max(1, Math.round(geo.ROOM_DUCT_LEN / geo.DOT_SPACING)),
+        colors: [ROOM._dotColor('supply_air')],
+      },
+    ],
+    hp: null,
+  },
+];
 
 await rm('.preview-frames', { recursive: true, force: true });
-await mkdir('.preview-frames', { recursive: true });
 
-// linkedom parses innerHTML in HTML mode, where <circle> is not a void element,
-// so assigning dot markup there nests every circle inside the last. Serialise
-// the document once with both groups empty and substitute as text instead.
-dotsG.innerHTML = '';
-hpG.innerHTML = '';
-const template = svgEl.outerHTML
-  .replace('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" width="1160" height="415" ')
-  .replace('>', `><style>text{font-family:-apple-system,Helvetica,sans-serif}${css}</style>`);
-if (!template.includes('<g data-dots="" />')) throw new Error('dots placeholder not found');
-if (!template.includes('<g data-hp-dots="" />')) throw new Error('hp placeholder not found');
+for (const t of targets) {
+  // The pattern repeats once every dot has moved into its neighbour's place, so
+  // one spacing-period is the shortest seamless loop.
+  const lead = t.plans[0];
+  const period = lead.len / lead.count / lead.speed;
+  const frames = Math.round(period * FPS);
+  console.log(`${t.name}: loop ${period.toFixed(3)}s, ${frames} frames at ${FPS}fps`);
+  for (const p of t.plans) {
+    const own = p.len / p.count / p.speed;
+    const seam = ((period % own) / own) * (p.len / p.count);
+    console.log(`  ${p.count} dots, period ${own.toFixed(3)}s, loop seam ${seam.toFixed(1)}px`);
+  }
 
-for (let f = 0; f < FRAMES; f++) {
-  const t = (f / FRAMES) * period;
-  let out = '';
-  for (const p of plans) {
-    const spacing = p.s.len / p.count;
-    for (let i = 0; i < p.count; i++) {
-      const dist = i * spacing + t * p.speed;
-      const [x, y] = p.path.at(dist);
-      const along = ((dist % p.s.len) + p.s.len) % p.s.len;
-      let ci = p.s.stops.findIndex((stop) => along <= stop);
-      if (ci < 0) ci = p.colors.length - 1;
-      out += `<circle cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" r="4" fill="${p.colors[ci]}"/>`;
+  const dir = `.preview-frames/${t.name}`;
+  await mkdir(dir, { recursive: true });
+
+  const svgEl = t.card.querySelector('svg');
+  svgEl.querySelector('[data-dots]').innerHTML = '';
+  const hpEl = svgEl.querySelector('[data-hp-dots]');
+  if (hpEl) hpEl.innerHTML = '';
+  const vb = svgEl.getAttribute('viewBox').split(' ').map(Number);
+  // linkedom parses innerHTML in HTML mode, where <circle> is not a void
+  // element, so assigning dot markup there nests every circle inside the last.
+  // Serialise once with the groups empty and substitute as text instead.
+  // Each card scopes its CSS under a class on its ha-card, so a standalone
+  // svg needs that class on itself to be an ancestor of what the rules target.
+  const template = svgEl.outerHTML
+    .replace('<svg ', `<svg xmlns="http://www.w3.org/2000/svg" class="${t.scope}" width="${vb[2]}" height="${vb[3]}" `)
+    .replace('>', `><style>text{font-family:-apple-system,Helvetica,sans-serif}${css}</style>`);
+  if (!template.includes('<g data-dots="" />')) {
+    throw new Error(`${t.name}: dots placeholder missing`);
+  }
+
+  for (let f = 0; f < frames; f++) {
+    const time = (f / frames) * period;
+    let dots = '';
+    for (const p of t.plans) {
+      const spacing = p.len / p.count;
+      for (let i = 0; i < p.count; i++) {
+        const dist = i * spacing + time * p.speed;
+        const [x, y] = p.path.at(dist);
+        const along = ((dist % p.len) + p.len) % p.len;
+        let ci = p.stops.findIndex((stop) => along <= stop);
+        if (ci < 0) ci = p.colors.length - 1;
+        dots += `<circle cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" r="4" fill="${p.colors[ci]}"/>`;
+      }
     }
+    let svg = template.replace('<g data-dots="" />', `<g>${dots}</g>`);
+    if (t.hp) {
+      // heating moves heat up, from the evaporator to the condenser
+      let hp = '';
+      for (let i = 0; i < 2; i++) {
+        const d = (i * (t.hp.len / 2) + time * 60) % t.hp.len;
+        hp += `<circle cx="${t.hp.x}" cy="${(t.hp.bottom - d).toFixed(2)}" r="4" fill="#ff9800"/>`;
+      }
+      svg = svg.replace('<g data-hp-dots="" />', `<g>${hp}</g>`);
+    }
+    await writeFile(`${dir}/f${String(f).padStart(3, '0')}.svg`, svg);
   }
-
-  // heat pump: heating moves heat up, from the evaporator to the condenser
-  let hp = '';
-  for (let i = 0; i < 2; i++) {
-    const d = (i * (hpLen / 2) + t * hpSpeed) % hpLen;
-    hp += `<circle cx="${HP_LINK.x}" cy="${(HP_LINK.bottom - d).toFixed(2)}" r="4" fill="#ff9800"/>`;
-  }
-
-  const svg = template
-    .replace('<g data-dots="" />', `<g>${out}</g>`)
-    .replace('<g data-hp-dots="" />', `<g>${hp}</g>`);
-  await writeFile(`.preview-frames/f${String(f).padStart(3, '0')}.svg`, svg);
+  await writeFile(`${dir}/width.txt`, String(t.width));
 }
-console.log(`wrote ${FRAMES} frames`);
+console.log('frames written');

@@ -20,5 +20,9 @@
   supply air arriving, the room's measured and target temperature side by side,
   the auxiliary heater with its own state, and how far the room sits from its
   setpoint. Rooms are separate devices, so one card is one room.
+- **Card styles are scoped.** Both cards write their CSS into the light DOM,
+  so generic class names like `.coil` leaked between them. With both on one
+  dashboard the air flow card's grey coil stroke won over the room card's
+  presentation attribute, and the auxiliary heater could never show as firing.
 - **Clickable readouts.** Every sensor, the bypass state, the heat pump state
   and both air performance values open their more-info dialog with history.

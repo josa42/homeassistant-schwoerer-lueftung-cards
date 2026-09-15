@@ -428,43 +428,43 @@ class WgtAirFlowCard extends HTMLElement {
   _build() {
     const linkD = `M${HP_LINK.x},${HP_LINK.top} L${HP_LINK.x},${HP_LINK.bottom}`;
     this.innerHTML = `
-      <ha-card>
+      <ha-card class="wgt-af">
         <style>
-          .wrap { padding: 0; }
-          svg { width: 100%; height: auto; display: block; max-width: 1160px; margin: 0 auto; }
-          .warn { padding: 8px 12px 0; color: var(--warning-color, #ffa726); font-size: 14px; }
-          .zone { fill: var(--divider-color); opacity: .22; }
-          .housing { fill: var(--divider-color); fill-opacity: .12;
+          .wgt-af .wrap { padding: 0; }
+          .wgt-af svg { width: 100%; height: auto; display: block; max-width: 1160px; margin: 0 auto; }
+          .wgt-af .warn { padding: 8px 12px 0; color: var(--warning-color, #ffa726); font-size: 14px; }
+          .wgt-af .zone { fill: var(--divider-color); opacity: .22; }
+          .wgt-af .housing { fill: var(--divider-color); fill-opacity: .12;
                      stroke: var(--secondary-text-color); stroke-width: 1.2;
                      stroke-opacity: .4; }
-          .component { fill: none; stroke: var(--secondary-text-color); stroke-width: 1.5;
+          .wgt-af .component { fill: none; stroke: var(--secondary-text-color); stroke-width: 1.5;
                        stroke-dasharray: 6 5; opacity: .55; }
-          .component-title { fill: var(--secondary-text-color); font-size: 14px;
+          .wgt-af .component-title { fill: var(--secondary-text-color); font-size: 14px;
                              font-weight: 500; text-anchor: middle; }
-          .duct { stroke: var(--divider-color); stroke-width: 15; fill: none;
+          .wgt-af .duct { stroke: var(--divider-color); stroke-width: 15; fill: none;
                   stroke-linecap: round; stroke-linejoin: round; opacity: .55; }
-          .line { stroke: var(--disabled-text-color, #bdbdbd); stroke-width: 1; fill: none; }
-          .hp-link { stroke-width: 2; }
-          .hp-link.idle { stroke-dasharray: 5 5; opacity: .5; }
-          .ring { fill: var(--card-background-color, #fff); stroke-width: 2; }
-          .cap { fill: var(--disabled-text-color, #bdbdbd); }
-          .coil { fill: var(--card-background-color, #fff);
+          .wgt-af .line { stroke: var(--disabled-text-color, #bdbdbd); stroke-width: 1; fill: none; }
+          .wgt-af .hp-link { stroke-width: 2; }
+          .wgt-af .hp-link.idle { stroke-dasharray: 5 5; opacity: .5; }
+          .wgt-af .ring { fill: var(--card-background-color, #fff); stroke-width: 2; }
+          .wgt-af .cap { fill: var(--disabled-text-color, #bdbdbd); }
+          .wgt-af .coil { fill: var(--card-background-color, #fff);
                   stroke: var(--disabled-text-color, #bdbdbd); stroke-width: 1.5;
                   stroke-dasharray: 4 3; }
-          .tag { fill: var(--secondary-text-color); font-size: 13px; text-anchor: middle; }
-          .val { fill: var(--primary-text-color); font-size: 19px; font-weight: 500;
+          .wgt-af .tag { fill: var(--secondary-text-color); font-size: 13px; text-anchor: middle; }
+          .wgt-af .val { fill: var(--primary-text-color); font-size: 19px; font-weight: 500;
                  text-anchor: middle; }
-          .label { fill: var(--secondary-text-color); font-size: 14px; text-anchor: middle; }
-          .coil-tag { fill: var(--secondary-text-color); font-size: 13px; font-weight: 500;
+          .wgt-af .label { fill: var(--secondary-text-color); font-size: 14px; text-anchor: middle; }
+          .wgt-af .coil-tag { fill: var(--secondary-text-color); font-size: 13px; font-weight: 500;
                       text-anchor: middle; }
-          .caption { fill: var(--primary-text-color); font-size: 13px; font-weight: 500;
+          .wgt-af .caption { fill: var(--primary-text-color); font-size: 13px; font-weight: 500;
                      text-anchor: middle; letter-spacing: 1.2px; opacity: .8; }
-          .sub { fill: var(--secondary-text-color); font-size: 13px; text-anchor: middle; }
-          .sub.alert { fill: var(--info-color, #039be5); }
-          .node { cursor: pointer; }
-          .node:hover .ring { stroke-width: 3; }
-          .hit { fill: none; pointer-events: all; rx: 6; }
-          .node:hover .hit { fill: var(--secondary-text-color); fill-opacity: .1; }
+          .wgt-af .sub { fill: var(--secondary-text-color); font-size: 13px; text-anchor: middle; }
+          .wgt-af .sub.alert { fill: var(--info-color, #039be5); }
+          .wgt-af .node { cursor: pointer; }
+          .wgt-af .node:hover .ring { stroke-width: 3; }
+          .wgt-af .hit { fill: none; pointer-events: all; rx: 6; }
+          .wgt-af .node:hover .hit { fill: var(--secondary-text-color); fill-opacity: .1; }
         </style>
         <div class="wrap">
           <svg viewBox="0 0 1160 415" role="img" aria-label="WGT Luftweg mit Temperaturen">
@@ -791,6 +791,13 @@ class WgtRoomCard extends HTMLElement {
     return Number.isFinite(v) ? v : null;
   }
 
+  // Quantised to 0.5 K, as on the air flow card: a raw reading flickers by
+  // 0.1 K every poll and rebuilding the dots for an invisible shift is churn.
+  _dotColor(slot) {
+    const v = this._num(slot);
+    return v === null ? "#9e9e9e" : tempColor(Math.round(v * 2) / 2);
+  }
+
   // Same curve as the air flow card, so dots move at one speed across both.
   _speed() {
     const pct = this._num("supply_flow");
@@ -811,8 +818,7 @@ class WgtRoomCard extends HTMLElement {
     const prev = this._phase.room;
     const f0 = prev ? (((now - prev.t0) / prev.dur + prev.f0) % 1 + 1) % 1 : 0;
     this._phase.room = { t0: now, dur, f0 };
-    const v = this._num("supply_air");
-    const color = v === null ? "#9e9e9e" : tempColor(Math.round(v * 2) / 2);
+    const color = this._dotColor("supply_air");
     let out = "";
     for (let i = 0; i < count; i++) {
       const begin = `-${(((f0 + i / count) % 1) * dur).toFixed(3)}s`;
@@ -826,40 +832,40 @@ class WgtRoomCard extends HTMLElement {
 
   _build() {
     this.innerHTML = `
-      <ha-card>
+      <ha-card class="wgt-room">
         <style>
-          .wrap { padding: 0; }
-          svg { width: 100%; height: auto; display: block; max-width: ${ROOM_W}px; margin: 0 auto; }
-          .warn { padding: 8px 12px 0; color: var(--warning-color, #ffa726); font-size: 14px; }
-          .zone { fill: var(--divider-color); opacity: .22; }
-          .housing { fill: var(--divider-color); fill-opacity: .12;
+          .wgt-room .wrap { padding: 0; }
+          .wgt-room svg { width: 100%; height: auto; display: block; max-width: ${ROOM_W}px; margin: 0 auto; }
+          .wgt-room .warn { padding: 8px 12px 0; color: var(--warning-color, #ffa726); font-size: 14px; }
+          .wgt-room .zone { fill: var(--divider-color); opacity: .22; }
+          .wgt-room .housing { fill: var(--divider-color); fill-opacity: .12;
                      stroke: var(--secondary-text-color); stroke-width: 1.2;
                      stroke-opacity: .4; }
-          .room-title { fill: var(--primary-text-color); font-size: 14px;
+          .wgt-room .room-title { fill: var(--primary-text-color); font-size: 14px;
                         font-weight: 500; opacity: .85; }
-          .duct { stroke: var(--divider-color); stroke-width: 15; fill: none;
+          .wgt-room .duct { stroke: var(--divider-color); stroke-width: 15; fill: none;
                   stroke-linecap: round; opacity: .55; }
-          .line { stroke: var(--disabled-text-color, #bdbdbd); stroke-width: 1; fill: none; }
-          .ring { fill: var(--card-background-color, #fff); stroke-width: 2; }
-          .cap { fill: var(--disabled-text-color, #bdbdbd); }
-          .coil { fill: var(--card-background-color, #fff); stroke-width: 2;
+          .wgt-room .line { stroke: var(--disabled-text-color, #bdbdbd); stroke-width: 1; fill: none; }
+          .wgt-room .ring { fill: var(--card-background-color, #fff); stroke-width: 2; }
+          .wgt-room .cap { fill: var(--disabled-text-color, #bdbdbd); }
+          .wgt-room .coil { fill: var(--card-background-color, #fff); stroke-width: 2;
                   stroke-dasharray: 4 3; }
-          .coil.on { stroke-dasharray: none; }
-          .tag { fill: var(--secondary-text-color); font-size: 13px; text-anchor: middle; }
-          .val { fill: var(--primary-text-color); font-size: 19px; font-weight: 500;
+          .wgt-room .coil.on { stroke-dasharray: none; }
+          .wgt-room .tag { fill: var(--secondary-text-color); font-size: 13px; text-anchor: middle; }
+          .wgt-room .val { fill: var(--primary-text-color); font-size: 19px; font-weight: 500;
                  text-anchor: middle; }
-          .label { fill: var(--secondary-text-color); font-size: 14px; text-anchor: middle; }
-          .coil-tag { fill: var(--secondary-text-color); font-size: 13px; font-weight: 500;
+          .wgt-room .label { fill: var(--secondary-text-color); font-size: 14px; text-anchor: middle; }
+          .wgt-room .coil-tag { fill: var(--secondary-text-color); font-size: 13px; font-weight: 500;
                       text-anchor: middle; }
-          .caption { fill: var(--primary-text-color); font-size: 13px; font-weight: 500;
+          .wgt-room .caption { fill: var(--primary-text-color); font-size: 13px; font-weight: 500;
                      text-anchor: middle; letter-spacing: 1.2px; opacity: .8; }
-          .sub { fill: var(--secondary-text-color); font-size: 13px; text-anchor: middle; }
-          .sub.warm { fill: #f4511e; }
-          .sub.cool { fill: #039be5; }
-          .node { cursor: pointer; }
-          .node:hover .ring, .node:hover .coil { stroke-width: 3; }
-          .hit { fill: none; pointer-events: all; rx: 6; }
-          .node:hover .hit { fill: var(--secondary-text-color); fill-opacity: .1; }
+          .wgt-room .sub { fill: var(--secondary-text-color); font-size: 13px; text-anchor: middle; }
+          .wgt-room .sub.warm { fill: #f4511e; }
+          .wgt-room .sub.cool { fill: #039be5; }
+          .wgt-room .node { cursor: pointer; }
+          .wgt-room .node:hover .ring, .wgt-room .node:hover .coil { stroke-width: 3; }
+          .wgt-room .hit { fill: none; pointer-events: all; rx: 6; }
+          .wgt-room .node:hover .hit { fill: var(--secondary-text-color); fill-opacity: .1; }
         </style>
         <div class="wrap">
           <svg viewBox="0 0 ${ROOM_W} ${ROOM_H}" role="img" aria-label="Raumzustand">
@@ -1015,7 +1021,7 @@ class WgtRoomCard extends HTMLElement {
     const t4 = this._num("supply_air");
     this._q("[data-supply-air]").textContent = t4 === null ? "" : `${t4.toFixed(1)}°`;
 
-    const dotSig = `${this._speed()}|${this._num("supply_air")}`;
+    const dotSig = `${this._speed()}|${this._dotColor("supply_air")}`;
     if (dotSig !== this._dotSig) {
       this._dotSig = dotSig;
       this._dotsEl.innerHTML = this._dotsMarkup(now);
