@@ -45,6 +45,11 @@ far apart they are, and whether the thermostat is heating or only ventilating.
 Each room is its own device in the integration, so one card shows one room. The
 card names itself after the room's area.
 
+The Zusatzheizung line reads `heizt`, `bereit` or `gesperrt`. Whether heating is
+permitted and whether it is firing are two different registers, but the climate
+entity's `hvac_mode` is derived from the permit register rather than being one
+of its own, so the card states it once instead of twice.
+
 ```yaml
 type: custom:wgt-room-card
 device_id: 28d672dcbceff92601287789cdffb7bb

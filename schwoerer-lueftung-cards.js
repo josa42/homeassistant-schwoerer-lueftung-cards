@@ -744,8 +744,6 @@ const ROOM_NODES = {
   climate: { x: 580, y: 195, tag: "SOLL", label: "Solltemperatur" },
 };
 
-const HVAC_LABELS = { heat: "Heizen", fan_only: "nur Lüften", off: "aus" };
-
 class WgtRoomCard extends HTMLElement {
   static SLOTS = ROOM_SLOTS;
 
@@ -924,8 +922,8 @@ class WgtRoomCard extends HTMLElement {
               </g>`
             ).join("")}
 
-            <text x="${ROOM_NODES.current_temperature.x}" y="286" class="sub" data-mode></text>
-            <text x="${ROOM_NODES.climate.x}" y="286" class="sub" data-delta></text>
+            <text x="${(ROOM_NODES.current_temperature.x + ROOM_NODES.climate.x) / 2}"
+                  y="286" class="sub" data-delta></text>
           </svg>
           <div class="warn" hidden>Kein Raum gewählt – bitte im Karten-Editor ein Raumgerät auswählen.</div>
         </div>
@@ -1001,9 +999,6 @@ class WgtRoomCard extends HTMLElement {
     sollG.querySelector(".ring").setAttribute("stroke", tempColor(soll));
     sollG.querySelector(".val").textContent = soll === null ? "–" : `${soll.toFixed(1)}°`;
 
-    const hvac = climate?.state;
-    this._q("[data-mode]").textContent = HVAC_LABELS[hvac] || hvac || "";
-
     const deltaEl = this._q("[data-delta]");
     if (ist === null || soll === null) {
       deltaEl.textContent = "";
@@ -1018,15 +1013,20 @@ class WgtRoomCard extends HTMLElement {
       deltaEl.classList.toggle("cool", d <= -0.3);
     }
 
+    // Register 440+i is the room's heating enable, and the climate entity's
+    // hvac_mode is derived straight from it (climate.py). Reading both would
+    // print one register twice under two names, so the climate entity is the
+    // source and the switch only a fallback for a stripped-down setup.
+    const hvac = climate?.state;
+    const auxEnabled = hvac ? hvac === "heat" : this._state("aux_enabled") === "on";
     const auxActive = this._state("aux_active") === "on";
-    const auxEnabled = this._state("aux_enabled") === "on";
     const coil = this._q("[data-coil]");
     coil.setAttribute("stroke", auxActive ? "#ff9800" : "var(--disabled-text-color, #bdbdbd)");
     coil.classList.toggle("on", auxActive);
     this._q("[data-aux]").textContent = auxActive
       ? "heizt"
       : auxEnabled
-        ? "freigegeben"
+        ? "bereit"
         : "gesperrt";
 
     const sched = this._state("scheduled");
