@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  # Weekly, Sunday 00:00 UTC: catches upstream HACS breakage without a run a
+  # day on a repo that goes quiet for months at a time.
+  schedule:
+    - cron: "0 0 * * 0"
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # The card ships unbundled, so a syntax error would reach users as a
+      # silently missing card. This is the only gate that catches it.
+      - name: Check syntax
+        run: node --check schwoerer-lueftung-cards.js
+
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: HACS validation
+        uses: hacs/action@main
+        with:
+          category: plugin
