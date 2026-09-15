@@ -212,6 +212,37 @@ const BYPASS_LABELS = {
 const HEAT_PUMP_COLORS = { heating: "#ff9800", cooling: "#488fc2" };
 const HEAT_PUMP_LABELS = { off: "aus", heating: "heizt", cooling: "kühlt" };
 
+// Matches each slot against the `entity_type` state attribute the integration
+// sets on all of its entities.
+//
+// Two wrinkles a plain type lookup gets wrong. `auxiliary_heating_enabled_room`
+// is both a switch and a (disabled by default) binary_sensor, so a slot can pin
+// a domain. And a room card needs a couple of readings off the main unit rather
+// than the room device, so a slot can opt out of the device filter.
+function resolveSlots(hass, slots, config) {
+  const overrides = config.sensors || {};
+  const deviceId = config.device_id;
+  const inDevice = {};
+  const anywhere = {};
+  for (const id of Object.keys(hass.states)) {
+    const type = hass.states[id].attributes?.entity_type;
+    if (!type) continue;
+    const domain = id.slice(0, id.indexOf("."));
+    const onDevice = deviceId && hass.entities?.[id]?.device_id === deviceId;
+    for (const key of [type, `${type}|${domain}`]) {
+      if (!(key in anywhere)) anywhere[key] = id;
+      if (onDevice && !(key in inDevice)) inDevice[key] = id;
+    }
+  }
+  const out = {};
+  for (const [slot, meta] of Object.entries(slots)) {
+    const key = meta.domain ? `${meta.type}|${meta.domain}` : meta.type;
+    const pool = meta.global || !deviceId ? anywhere : inDevice;
+    out[slot] = overrides[slot] || config[slot] || pool[key] || null;
+  }
+  return out;
+}
+
 function esc(s) {
   return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
@@ -227,6 +258,8 @@ async function loadHaComponents() {
 }
 
 class WgtAirFlowCard extends HTMLElement {
+  static SLOTS = SLOTS;
+
   static async getConfigElement() {
     await loadHaComponents();
     return document.createElement("wgt-air-flow-card-editor");
@@ -269,22 +302,7 @@ class WgtAirFlowCard extends HTMLElement {
       this._resolved &&
       Object.values(this._resolved).some((id) => id && !this._hass.states[id]);
     if (this._resolved && !stale) return this._resolved;
-
-    const cfg = this._config;
-    const overrides = cfg.sensors || {};
-    const deviceId = cfg.device_id;
-    const byType = {};
-    for (const id of Object.keys(this._hass.states)) {
-      const type = this._hass.states[id].attributes?.entity_type;
-      if (!type || type in byType) continue;
-      if (deviceId && this._hass.entities?.[id]?.device_id !== deviceId) continue;
-      byType[type] = id;
-    }
-
-    this._resolved = {};
-    for (const [slot, meta] of Object.entries(SLOTS)) {
-      this._resolved[slot] = overrides[slot] || cfg[slot] || byType[meta.type] || null;
-    }
+    this._resolved = resolveSlots(this._hass, this.constructor.SLOTS, this._config);
     return this._resolved;
   }
 
@@ -673,6 +691,440 @@ class WgtAirFlowCardEditor extends HTMLElement {
     this._form.data = this._config;
   }
 }
+
+// ---------------------------------------------------------------------------
+// Room card
+// ---------------------------------------------------------------------------
+
+const ROOM_SLOTS = {
+  current_temperature: {
+    type: "current_temperature_room", domain: "sensor", label: "Raumtemperatur",
+  },
+  climate: { type: "climate_room", domain: "climate", label: "Raumthermostat" },
+  aux_active: {
+    type: "auxiliary_heating_active_room", domain: "binary_sensor",
+    label: "Zusatzheizung aktiv",
+  },
+  aux_enabled: {
+    type: "auxiliary_heating_enabled_room", domain: "switch",
+    label: "Zusatzheizung freigegeben",
+  },
+  scheduled: {
+    type: "scheduled_heating_enabled_room", domain: "switch", label: "Zeitprogramm",
+  },
+  base_temperature: {
+    type: "base_temperature_room", domain: "number", label: "Basistemperatur",
+  },
+  // Read off the main unit rather than the room device: the air arriving here
+  // is what the unit last measured leaving it, and the fans set the dot speed.
+  supply_air: {
+    type: "temperature_t4_after_reheater", domain: "sensor", global: true,
+    label: "Zuluft (T4)",
+  },
+  supply_flow: {
+    type: "current_supply_air_flow", domain: "sensor", global: true,
+    label: "Luftleistung Zuluft",
+  },
+};
+
+const ROOM_W = 820;
+const ROOM_H = 320;
+const ROOM_DUCT_Y = 84;
+const ROOM_BOX = { x: 130, y: 26, w: 560, h: 268 };
+const ROOM_ZONES = [
+  { x: 0, y: 26, w: 100, h: 268 },
+  { x: 720, y: 26, w: 100, h: 268 },
+];
+const ROOM_DUCT = "M56,84 L764,84";
+const ROOM_DUCT_LEN = 708;
+const ROOM_COIL = { x: 210, y: ROOM_DUCT_Y, r: 20 };
+const ROOM_NODE = { w: 150, h: 90 };
+const ROOM_NODES = {
+  current_temperature: { x: 390, y: 195, tag: "IST", label: "Raumtemperatur" },
+  climate: { x: 580, y: 195, tag: "SOLL", label: "Solltemperatur" },
+};
+
+const HVAC_LABELS = { heat: "Heizen", fan_only: "nur Lüften", off: "aus" };
+
+class WgtRoomCard extends HTMLElement {
+  static SLOTS = ROOM_SLOTS;
+
+  static async getConfigElement() {
+    await loadHaComponents();
+    return document.createElement("wgt-room-card-editor");
+  }
+
+  static getStubConfig(hass) {
+    const anchorId = Object.keys(hass?.states || {}).find(
+      (id) => hass.states[id].attributes?.entity_type === "climate_room"
+    );
+    const deviceId = anchorId && hass.entities?.[anchorId]?.device_id;
+    return deviceId
+      ? { type: "custom:wgt-room-card", device_id: deviceId }
+      : { type: "custom:wgt-room-card" };
+  }
+
+  setConfig(config) {
+    this._config = { ...config };
+    this._resolved = null;
+    this._signature = null;
+    this._dotSig = null;
+    this._phase = this._phase || {};
+  }
+
+  set hass(hass) {
+    this._hass = hass;
+    const ids = this._entities();
+    const climate = ids.climate && hass.states[ids.climate];
+    const sig =
+      Object.values(ids)
+        .map((id) => (id ? hass.states[id]?.state ?? "?" : "-"))
+        .join("|") + `|${climate?.attributes?.temperature ?? "-"}`;
+    if (sig === this._signature) return;
+    this._signature = sig;
+    this._render();
+  }
+
+  _entities() {
+    const stale =
+      this._resolved &&
+      Object.values(this._resolved).some((id) => id && !this._hass.states[id]);
+    if (this._resolved && !stale) return this._resolved;
+    this._resolved = resolveSlots(this._hass, ROOM_SLOTS, this._config);
+    return this._resolved;
+  }
+
+  _state(slot) {
+    const id = this._entities()[slot];
+    return (id && this._hass.states[id]?.state) || null;
+  }
+
+  _num(slot) {
+    const v = Number.parseFloat(this._state(slot));
+    return Number.isFinite(v) ? v : null;
+  }
+
+  // The setpoint lives on the climate entity rather than in its state.
+  _target() {
+    const id = this._entities().climate;
+    const v = Number.parseFloat(this._hass.states[id]?.attributes?.temperature);
+    return Number.isFinite(v) ? v : null;
+  }
+
+  // Same curve as the air flow card, so dots move at one speed across both.
+  _speed() {
+    const pct = this._num("supply_flow");
+    if (pct === null) return 40;
+    if (pct <= 0) return 0;
+    const f = Math.min(1, pct / 100);
+    return 170 * f * f;
+  }
+
+  _dotsMarkup(now) {
+    const speed = this._speed();
+    if (!speed) {
+      delete this._phase.room;
+      return "";
+    }
+    const dur = Number((ROOM_DUCT_LEN / speed).toFixed(2));
+    const count = Math.max(1, Math.round(ROOM_DUCT_LEN / DOT_SPACING));
+    const prev = this._phase.room;
+    const f0 = prev ? (((now - prev.t0) / prev.dur + prev.f0) % 1 + 1) % 1 : 0;
+    this._phase.room = { t0: now, dur, f0 };
+    const v = this._num("supply_air");
+    const color = v === null ? "#9e9e9e" : tempColor(Math.round(v * 2) / 2);
+    let out = "";
+    for (let i = 0; i < count; i++) {
+      const begin = `-${(((f0 + i / count) % 1) * dur).toFixed(3)}s`;
+      out += `<circle r="4" fill="${color}" class="dot">
+        <animateMotion dur="${dur}s" repeatCount="indefinite" calcMode="paced"
+          begin="${begin}" path="${ROOM_DUCT}"/>
+      </circle>`;
+    }
+    return out;
+  }
+
+  _build() {
+    this.innerHTML = `
+      <ha-card>
+        <style>
+          .wrap { padding: 0; }
+          svg { width: 100%; height: auto; display: block; max-width: ${ROOM_W}px; margin: 0 auto; }
+          .warn { padding: 8px 12px 0; color: var(--warning-color, #ffa726); font-size: 14px; }
+          .zone { fill: var(--divider-color); opacity: .22; }
+          .housing { fill: var(--divider-color); fill-opacity: .12;
+                     stroke: var(--secondary-text-color); stroke-width: 1.2;
+                     stroke-opacity: .4; }
+          .room-title { fill: var(--primary-text-color); font-size: 15px;
+                        font-weight: 500; opacity: .85; }
+          .duct { stroke: var(--divider-color); stroke-width: 15; fill: none;
+                  stroke-linecap: round; opacity: .55; }
+          .line { stroke: var(--disabled-text-color, #bdbdbd); stroke-width: 1; fill: none; }
+          .ring { fill: var(--card-background-color, #fff); stroke-width: 2; }
+          .cap { fill: var(--disabled-text-color, #bdbdbd); }
+          .coil { fill: var(--card-background-color, #fff); stroke-width: 2;
+                  stroke-dasharray: 4 3; }
+          .coil.on { stroke-dasharray: none; }
+          .tag { fill: var(--secondary-text-color); font-size: 13px; text-anchor: middle; }
+          .val { fill: var(--primary-text-color); font-size: 28px; font-weight: 500;
+                 text-anchor: middle; }
+          .label { fill: var(--secondary-text-color); font-size: 14px; text-anchor: middle; }
+          .coil-tag { fill: var(--secondary-text-color); font-size: 12px; font-weight: 500;
+                      text-anchor: middle; }
+          .caption { fill: var(--primary-text-color); font-size: 13px; font-weight: 500;
+                     text-anchor: middle; letter-spacing: 1.2px; opacity: .8; }
+          .sub { fill: var(--secondary-text-color); font-size: 13px; text-anchor: middle; }
+          .sub.warm { fill: #f4511e; }
+          .sub.cool { fill: #039be5; }
+          .node { cursor: pointer; }
+          .node:hover .ring, .node:hover .coil { stroke-width: 3; }
+          .hit { fill: none; pointer-events: all; rx: 6; }
+          .node:hover .hit { fill: var(--secondary-text-color); fill-opacity: .1; }
+        </style>
+        <div class="wrap">
+          <svg viewBox="0 0 ${ROOM_W} ${ROOM_H}" role="img" aria-label="Raumzustand">
+            ${ROOM_ZONES.map(
+              (z) => `<rect x="${z.x}" y="${z.y}" width="${z.w}" height="${z.h}" rx="16" class="zone"/>`
+            ).join("")}
+            <rect x="${ROOM_BOX.x}" y="${ROOM_BOX.y}" width="${ROOM_BOX.w}"
+                  height="${ROOM_BOX.h}" rx="20" class="housing"/>
+            <text x="${ROOM_BOX.x + 22}" y="${ROOM_BOX.y + 26}" class="room-title" data-room-title></text>
+
+            <path d="${ROOM_DUCT}" class="duct"/>
+            <path d="${ROOM_DUCT}" class="line"/>
+            <g data-dots></g>
+
+            <circle cx="50" cy="${ROOM_DUCT_Y}" r="6" class="cap"/>
+            <circle cx="770" cy="${ROOM_DUCT_Y}" r="6" class="cap"/>
+            <text x="50" y="${ROOM_DUCT_Y - 36}" class="caption">ZULUFT</text>
+            <text x="770" y="${ROOM_DUCT_Y - 36}" class="caption">ABLUFT</text>
+            <text x="50" y="${ROOM_DUCT_Y + 46}" class="sub" data-supply-air></text>
+
+            <g class="node" data-slot="aux_active">
+              <rect x="${ROOM_COIL.x - 70}" y="${ROOM_COIL.y + 24}" width="140" height="52" class="hit"/>
+              <circle cx="${ROOM_COIL.x}" cy="${ROOM_COIL.y}" r="${ROOM_COIL.r}" class="coil"
+                      data-coil stroke="var(--disabled-text-color, #bdbdbd)"/>
+              <text x="${ROOM_COIL.x}" y="${ROOM_COIL.y + 4}" class="coil-tag">ZH</text>
+              <text x="${ROOM_COIL.x}" y="${ROOM_COIL.y + 44}" class="label">Zusatzheizung</text>
+              <text x="${ROOM_COIL.x}" y="${ROOM_COIL.y + 62}" class="sub" data-aux></text>
+            </g>
+
+            <g class="node" data-slot="scheduled">
+              <rect x="${ROOM_COIL.x - 70}" y="${ROOM_COIL.y + 70}" width="140" height="24" class="hit"/>
+              <text x="${ROOM_COIL.x}" y="${ROOM_COIL.y + 86}" class="sub" data-scheduled></text>
+            </g>
+
+            ${Object.entries(ROOM_NODES).map(
+              ([slot, n]) => `<g class="node" data-slot="${slot}">
+                <rect x="${n.x - ROOM_NODE.w / 2}" y="${n.y - ROOM_NODE.h / 2}"
+                      width="${ROOM_NODE.w}" height="${ROOM_NODE.h}" rx="16" class="ring"/>
+                <text x="${n.x}" y="${n.y - 16}" class="tag">${n.tag}</text>
+                <text x="${n.x}" y="${n.y + 18}" class="val"></text>
+                <text x="${n.x}" y="${n.y + ROOM_NODE.h / 2 + 20}" class="label">${n.label}</text>
+              </g>`
+            ).join("")}
+
+            <text x="${ROOM_NODES.current_temperature.x}" y="286" class="sub" data-mode></text>
+            <text x="${ROOM_NODES.climate.x}" y="286" class="sub" data-delta></text>
+          </svg>
+          <div class="warn" hidden>Kein Raum gewählt – bitte im Karten-Editor ein Raumgerät auswählen.</div>
+        </div>
+      </ha-card>`;
+
+    this._card = this.querySelector("ha-card");
+    this._svgEl = this.querySelector("svg");
+    this._dotsEl = this.querySelector("[data-dots]");
+    this._warnEl = this.querySelector(".warn");
+    this._nodeEls = {};
+    for (const g of this.querySelectorAll("[data-slot]")) {
+      this._nodeEls[g.getAttribute("data-slot")] = g;
+    }
+    this._q = (sel) => this.querySelector(sel);
+
+    this.querySelector(".wrap").addEventListener("click", (ev) => {
+      const g = ev.target.closest(".node");
+      const entityId = g && g.getAttribute("data-entity");
+      if (!entityId) return;
+      this.dispatchEvent(
+        new CustomEvent("hass-more-info", {
+          detail: { entityId },
+          bubbles: true,
+          composed: true,
+        })
+      );
+    });
+    this._built = true;
+  }
+
+  // The area is what the user actually calls the room. Fall back to the
+  // thermostat's name with the integration's own prefix and suffix stripped.
+  _roomName() {
+    if (this._config.name) return this._config.name;
+    const ids = this._entities();
+    const id = ids.climate || ids.current_temperature;
+    if (!id) return "Raum";
+    const reg = this._hass.entities?.[id];
+    const areaId =
+      reg?.area_id || (reg?.device_id && this._hass.devices?.[reg.device_id]?.area_id);
+    const area = areaId && this._hass.areas?.[areaId]?.name;
+    if (area) return area;
+    const name = this._hass.states[id]?.attributes?.friendly_name || "";
+    return (
+      name
+        .replace(/^WGT\s*[-\u2013\u00b7]?\s*/, "")
+        .replace(/\s*Raumthermostat$/, "")
+        .trim() || "Raum"
+    );
+  }
+
+  _update() {
+    const ids = this._entities();
+    const now = this._svgEl.getCurrentTime ? this._svgEl.getCurrentTime() : 0;
+
+    const climate = ids.climate && this._hass.states[ids.climate];
+    const roomName = this._roomName();
+    if (this._config.title) this._card.setAttribute("header", this._config.title);
+    else this._card.removeAttribute("header");
+    this._q("[data-room-title]").textContent = roomName;
+
+    for (const slot of Object.keys(ROOM_SLOTS)) {
+      const g = this._nodeEls[slot];
+      if (g) g.setAttribute("data-entity", ids[slot] || "");
+    }
+
+    const ist = this._num("current_temperature");
+    const soll = this._target();
+    const istG = this._nodeEls.current_temperature;
+    istG.querySelector(".ring").setAttribute("stroke", tempColor(ist));
+    istG.querySelector(".val").textContent = ist === null ? "–" : `${ist.toFixed(1)}°`;
+    const sollG = this._nodeEls.climate;
+    sollG.querySelector(".ring").setAttribute("stroke", tempColor(soll));
+    sollG.querySelector(".val").textContent = soll === null ? "–" : `${soll.toFixed(1)}°`;
+
+    const hvac = climate?.state;
+    this._q("[data-mode]").textContent = HVAC_LABELS[hvac] || hvac || "";
+
+    const deltaEl = this._q("[data-delta]");
+    if (ist === null || soll === null) {
+      deltaEl.textContent = "";
+      deltaEl.classList.remove("warm", "cool");
+    } else {
+      const d = ist - soll;
+      deltaEl.textContent =
+        Math.abs(d) < 0.3
+          ? "auf Soll"
+          : `${Math.abs(d).toFixed(1)} K ${d > 0 ? "über" : "unter"} Soll`;
+      deltaEl.classList.toggle("warm", d >= 0.3);
+      deltaEl.classList.toggle("cool", d <= -0.3);
+    }
+
+    const auxActive = this._state("aux_active") === "on";
+    const auxEnabled = this._state("aux_enabled") === "on";
+    const coil = this._q("[data-coil]");
+    coil.setAttribute("stroke", auxActive ? "#ff9800" : "var(--disabled-text-color, #bdbdbd)");
+    coil.classList.toggle("on", auxActive);
+    this._q("[data-aux]").textContent = auxActive
+      ? "heizt"
+      : auxEnabled
+        ? "freigegeben"
+        : "gesperrt";
+
+    const sched = this._state("scheduled");
+    this._q("[data-scheduled]").textContent =
+      sched === null ? "" : `Zeitprogramm ${sched === "on" ? "an" : "aus"}`;
+
+    const t4 = this._num("supply_air");
+    this._q("[data-supply-air]").textContent = t4 === null ? "" : `${t4.toFixed(1)}°`;
+
+    const dotSig = `${this._speed()}|${this._num("supply_air")}`;
+    if (dotSig !== this._dotSig) {
+      this._dotSig = dotSig;
+      this._dotsEl.innerHTML = this._dotsMarkup(now);
+    }
+
+    this._warnEl.hidden = Boolean(ids.climate || ids.current_temperature);
+  }
+
+  _render() {
+    if (!this._built) this._build();
+    this._update();
+  }
+
+  getCardSize() {
+    return 5;
+  }
+}
+
+class WgtRoomCardEditor extends HTMLElement {
+  setConfig(config) {
+    this._config = config;
+    this._update();
+  }
+
+  set hass(hass) {
+    this._hass = hass;
+    this._update();
+  }
+
+  _update() {
+    if (!this._config || !this._hass) return;
+    if (!this._form) {
+      this._form = document.createElement("ha-form");
+      this._form.computeLabel = (sch) =>
+        ROOM_SLOTS[sch.name]?.label ||
+        { title: "Titel", name: "Name", device_id: "Raumgerät",
+          sensors: "Entitäten einzeln überschreiben" }[sch.name] ||
+        sch.name;
+      this._form.addEventListener("value-changed", (ev) => {
+        ev.stopPropagation();
+        const next = { ...ev.detail.value };
+        if (next.sensors) {
+          next.sensors = Object.fromEntries(
+            Object.entries(next.sensors).filter(([, v]) => v)
+          );
+          if (!Object.keys(next.sensors).length) delete next.sensors;
+        }
+        if (!next.device_id) delete next.device_id;
+        if (!next.name) delete next.name;
+        this.dispatchEvent(
+          new CustomEvent("config-changed", {
+            detail: { config: next },
+            bubbles: true,
+            composed: true,
+          })
+        );
+      });
+      this.appendChild(this._form);
+    }
+    this._form.hass = this._hass;
+    this._form.schema = [
+      { name: "title", selector: { text: {} } },
+      { name: "name", selector: { text: {} } },
+      { name: "device_id", selector: { device: { integration: "schwoerer_lueftung" } } },
+      {
+        name: "sensors",
+        type: "expandable",
+        title: "Entitäten einzeln überschreiben",
+        schema: Object.keys(ROOM_SLOTS).map((slot) => ({
+          name: slot,
+          selector: { entity: { integration: "schwoerer_lueftung" } },
+        })),
+      },
+    ];
+    this._form.data = this._config;
+  }
+}
+
+customElements.define("wgt-room-card-editor", WgtRoomCardEditor);
+customElements.define("wgt-room-card", WgtRoomCard);
+window.customCards = window.customCards || [];
+window.customCards.push({
+  type: "wgt-room-card",
+  name: "WGT Raum",
+  description: "Zustand eines einzelnen Raums: Ist, Soll und Zusatzheizung",
+  preview: true,
+  documentationURL: "https://github.com/josa42/homeassistant-schwoerer-lueftung-cards",
+});
 
 customElements.define("wgt-air-flow-card-editor", WgtAirFlowCardEditor);
 customElements.define("wgt-air-flow-card", WgtAirFlowCard);

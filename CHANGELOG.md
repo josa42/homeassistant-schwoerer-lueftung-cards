@@ -15,5 +15,9 @@
   Individual positions can still be overridden.
 - **Visual editor.** Pick the WGT device from a device picker; everything else
   has a working default.
+- **WGT Raum card.** The state of a single room in the same visual language:
+  supply air arriving, the room's measured and target temperature side by side,
+  the auxiliary heater with its own state, and how far the room sits from its
+  setpoint. Rooms are separate devices, so one card is one room.
 - **Clickable readouts.** Every sensor, the bypass state, the heat pump state
   and both air performance values open their more-info dialog with history.

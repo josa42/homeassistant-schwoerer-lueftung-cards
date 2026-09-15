@@ -35,6 +35,35 @@ needs `librsvg` and `imagemagick`.
 
 <br><br>
 
+## WGT Raum
+
+The state of one room, in the same visual language. Supply air arrives from the
+unit on the left, passes the room's auxiliary heating coil, and leaves as
+exhaust on the right. Inside sit the measured and the target temperature, how
+far apart they are, and whether the thermostat is heating or only ventilating.
+
+Each room is its own device in the integration, so one card shows one room. The
+card names itself after the room's area.
+
+```yaml
+type: custom:wgt-room-card
+device_id: 28d672dcbceff92601287789cdffb7bb
+```
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `type` | string | required | `custom:wgt-room-card` |
+| `device_id` | string | auto | The room device. The visual editor fills this in. |
+| `name` | string | the area | Overrides the room name drawn on the card. |
+| `title` | string | none | Card header. Usually unwanted, since the room name is already on the card. |
+| `sensors` | map | `{}` | Per-slot entity overrides, as above. |
+
+Two of its slots deliberately read from the main unit rather than the room:
+the Zuluft temperature (T4) and the air performance that sets the dot speed.
+Neither exists on a room device.
+
+<br><br>
+
 ## Requirements
 
 - Home Assistant **2026.9.0** or newer
