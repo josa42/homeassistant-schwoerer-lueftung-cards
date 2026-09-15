@@ -83,3 +83,9 @@ by hand and installing without HACS.
 ## License
 
 [MIT](LICENSE)
+
+<br><br>
+
+## Disclaimer
+
+This is an unofficial integration and is not affiliated with or endorsed by Schwörer Haus KG.
