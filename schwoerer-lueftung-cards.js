@@ -350,6 +350,12 @@ class WgtAirFlowCard extends HTMLElement {
     return f0;
   }
 
+  // calcMode MUST be paced, not linear. For animateMotion, linear splits the
+  // duration evenly across path SEGMENTS regardless of their length, so the
+  // short corner pieces would crawl and the long straights would race: an 18x
+  // speed swing on the exhaust path. paced is constant velocity along the
+  // path, which also makes time fraction equal distance fraction, which is
+  // what the fill keyTimes below assume.
   _dotsMarkup(stream, now) {
     const speed = this._speed(stream.name);
     if (!speed) {
@@ -365,7 +371,7 @@ class WgtAirFlowCard extends HTMLElement {
     for (let i = 0; i < count; i++) {
       const begin = `-${(((f0 + i / count) % 1) * dur).toFixed(3)}s`;
       out += `<circle r="4" fill="${colors[0]}" class="dot">
-        <animateMotion dur="${dur}s" repeatCount="indefinite" calcMode="linear"
+        <animateMotion dur="${dur}s" repeatCount="indefinite" calcMode="paced"
           begin="${begin}" path="${stream.d}"/>
         <animate attributeName="fill" dur="${dur}s" repeatCount="indefinite"
           calcMode="discrete" begin="${begin}"
@@ -394,7 +400,7 @@ class WgtAirFlowCard extends HTMLElement {
     for (let i = 0; i < 2; i++) {
       const begin = `-${(((f0 + i / 2) % 1) * dur).toFixed(3)}s`;
       out += `<circle r="4" fill="${color}" class="dot">
-        <animateMotion dur="${dur}s" repeatCount="indefinite" calcMode="linear"
+        <animateMotion dur="${dur}s" repeatCount="indefinite" calcMode="paced"
           begin="${begin}" path="${d}"/></circle>`;
     }
     return out;
