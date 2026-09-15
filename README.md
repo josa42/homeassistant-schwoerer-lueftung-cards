@@ -10,6 +10,8 @@ Dashboard cards for the [Schwörer Lüftung integration](https://github.com/josa
 
 ## WGT Luftweg
 
+![The WGT Luftweg card, showing air moving through the unit](assets/wgt-air-flow-card.gif)
+
 A schematic of the ventilation unit showing every temperature sensor at its real
 position in the air path.
 
@@ -25,6 +27,11 @@ when heating and downward when cooling.
 
 Tapping any sensor, the bypass state, the heat pump state, or either air
 performance value opens its more-info dialog with history.
+
+The recording above shows a winter state at fan level 3, with the heat pump
+heating, so that the colour scale and the heat transfer direction are both
+visible. Regenerate it after changing the card with `npm run preview`, which
+needs `librsvg` and `imagemagick`.
 
 <br><br>
 

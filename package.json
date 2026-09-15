@@ -1,0 +1,12 @@
+{
+  "name": "homeassistant-schwoerer-lueftung-cards",
+  "private": true,
+  "description": "Tooling for the README preview. The card itself ships unbundled and needs no build.",
+  "scripts": {
+    "check": "node --check schwoerer-lueftung-cards.js",
+    "preview": "node scripts/make-preview.mjs && ./scripts/make-preview.sh"
+  },
+  "devDependencies": {
+    "linkedom": "^0.18.0"
+  }
+}
