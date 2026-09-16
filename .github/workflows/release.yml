@@ -10,16 +10,4 @@ permissions:
 
 jobs:
   release:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-
-      # HACS prefers a release asset over the file in the branch, so the tag
-      # is what users actually install.
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: schwoerer-lueftung-cards.js
-          generate_release_notes: true
-          draft: false
-          prerelease: false
+    uses: josa42/gha-workflows/.github/workflows/ha-release.yml@main

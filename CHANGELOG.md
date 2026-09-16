@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.0
+
+- Updated styling
+
 ## 1.0.0 - 2026-09-15
 
 ### Added

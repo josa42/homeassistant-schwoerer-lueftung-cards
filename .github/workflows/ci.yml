@@ -10,26 +10,5 @@ on:
     - cron: "0 0 * * 0"
 
 jobs:
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-
-      # The card ships unbundled, so a syntax error would reach users as a
-      # silently missing card. This is the only gate that catches it.
-      - name: Check syntax
-        run: node --check schwoerer-lueftung-cards.js
-
-  validate:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: HACS validation
-        uses: hacs/action@main
-        with:
-          category: plugin
+  ci:
+    uses: josa42/gha-workflows/.github/workflows/ha-plugin.yml@main
