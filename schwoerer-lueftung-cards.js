@@ -67,11 +67,6 @@ const BOT_Y = 320;
 const ROW_LABEL_DY = 46;
 
 const HOUSING = { x: 140, y: 30, w: 880, h: 360 };
-const ZONES = [
-  { x: 0, y: 30, w: 120, h: 360 },
-  { x: 1040, y: 30, w: 120, h: 360 },
-];
-
 // Both enclosures share a top and a height so they read as one row of gear.
 const COMPONENTS = [
   { x: 420, y: 56, w: 160, h: 320, title: "Wärmetauscher", state: "bypass" },
@@ -433,7 +428,6 @@ class WgtAirFlowCard extends HTMLElement {
           .wgt-af .wrap { padding: 0; }
           .wgt-af svg { width: 100%; height: auto; display: block; max-width: 1160px; margin: 0 auto; }
           .wgt-af .warn { padding: 8px 12px 0; color: var(--warning-color, #ffa726); font-size: 14px; }
-          .wgt-af .zone { fill: var(--divider-color); opacity: .22; }
           .wgt-af .housing { fill: var(--divider-color); fill-opacity: .12;
                      stroke: var(--secondary-text-color); stroke-width: 1.2;
                      stroke-opacity: .4; }
@@ -468,9 +462,6 @@ class WgtAirFlowCard extends HTMLElement {
         </style>
         <div class="wrap">
           <svg viewBox="0 0 1160 415" role="img" aria-label="WGT Luftweg mit Temperaturen">
-            ${ZONES.map(
-              (z) => `<rect x="${z.x}" y="${z.y}" width="${z.w}" height="${z.h}" rx="16" class="zone"/>`
-            ).join("")}
             <rect x="${HOUSING.x}" y="${HOUSING.y}" width="${HOUSING.w}" height="${HOUSING.h}"
                   rx="20" class="housing"/>
             ${STREAMS.map((s) => `<path d="${s.d}" class="duct"/>`).join("")}
@@ -709,10 +700,6 @@ const ROOM_DUCT_Y = 78;
 const ROOM_BOX = { x: 90, y: 20, w: 400, h: 228 };
 // The room name and the two stream captions share this baseline.
 const ROOM_TITLE_Y = ROOM_BOX.y + 22;
-const ROOM_ZONES = [
-  { x: 0, y: 20, w: 70, h: 228 },
-  { x: 510, y: 20, w: 70, h: 228 },
-];
 const ROOM_CAP = { left: 35, right: 545 };
 const ROOM_DUCT = "M41,78 L539,78";
 const ROOM_DUCT_LEN = 498;
@@ -837,7 +824,6 @@ class WgtRoomCard extends HTMLElement {
           .wgt-room .wrap { padding: 0; }
           .wgt-room svg { width: 100%; height: auto; display: block; max-width: ${ROOM_W}px; margin: 0 auto; }
           .wgt-room .warn { padding: 8px 12px 0; color: var(--warning-color, #ffa726); font-size: 14px; }
-          .wgt-room .zone { fill: var(--divider-color); opacity: .22; }
           .wgt-room .housing { fill: var(--divider-color); fill-opacity: .12;
                      stroke: var(--secondary-text-color); stroke-width: 1.2;
                      stroke-opacity: .4; }
@@ -869,9 +855,6 @@ class WgtRoomCard extends HTMLElement {
         </style>
         <div class="wrap">
           <svg viewBox="0 0 ${ROOM_W} ${ROOM_H}" role="img" aria-label="Raumzustand">
-            ${ROOM_ZONES.map(
-              (z) => `<rect x="${z.x}" y="${z.y}" width="${z.w}" height="${z.h}" rx="16" class="zone"/>`
-            ).join("")}
             <rect x="${ROOM_BOX.x}" y="${ROOM_BOX.y}" width="${ROOM_BOX.w}"
                   height="${ROOM_BOX.h}" rx="20" class="housing"/>
             <text x="${ROOM_BOX.x + 18}" y="${ROOM_TITLE_Y}" class="room-title" data-room-title></text>
