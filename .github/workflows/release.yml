@@ -17,7 +17,7 @@ jobs:
 
   release:
     needs: ci
-    uses: josa42/gha-workflows/.github/workflows/ha-release.yml@main
+    uses: josa42/actions/.github/workflows/shared-ha-release.yml@main
     permissions:
       contents: write
     with:

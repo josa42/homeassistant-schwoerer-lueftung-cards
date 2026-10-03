@@ -9,6 +9,9 @@
   Actions tab or with `gh workflow run release -f version=<version>`.
   `scripts/release.sh` is gone.
 
+- **CI calls the shared workflows in josa42/actions.** They moved there from
+  josa42/gha-workflows.
+
 ## 1.1.0
 
 - Updated styling
