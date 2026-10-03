@@ -16,6 +16,8 @@
   when a `feat` commit landed since the last release and a patch otherwise.
   Pass `VERSION=major`, `VERSION=minor`, `VERSION=patch` or `VERSION=1.2.3`
   to choose yourself. Without a release yet, it asks for the first version.
+  It refuses to start while local changes are not pushed, since the workflow
+  releases what is on GitHub.
 
 ## 1.1.0
 

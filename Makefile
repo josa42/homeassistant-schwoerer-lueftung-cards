@@ -11,6 +11,15 @@ help:
 release:
 	@# The workflow releases origin/main, so that is what the bump is read from.
 	@git fetch --quiet --tags origin main
+	@if [ -n "$$(git status --porcelain --untracked-files=no)" ]; then \
+		echo "Uncommitted changes would not be released. Commit and push them first." >&2; \
+		exit 1; \
+	fi
+	@ahead=$$(git rev-list --count origin/main..HEAD); \
+	if [ "$$ahead" -gt 0 ]; then \
+		echo "$$ahead local commit(s) not on origin/main would not be released. Push them first." >&2; \
+		exit 1; \
+	fi
 	@version="$(VERSION)"; \
 	if [ -z "$$version" ]; then \
 		last=$$(git describe --tags --abbrev=0 --match 'v*' origin/main 2>/dev/null); \
