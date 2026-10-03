@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **Releases are built by the release workflow.** It runs CI, bumps the
+  version, dates this changelog and publishes the release. Start it from the
+  Actions tab or with `gh workflow run release -f version=<version>`.
+  `scripts/release.sh` is gone.
+
 ## 1.1.0
 
 - Updated styling

@@ -1,7 +1,7 @@
 const CARD_VERSION = "1.1.0";
 
 // Which build is loaded is the first question on any bug report, and a card has
-// nowhere else to say so. scripts/release.sh keeps this in step with the tag.
+// nowhere else to say so. The release workflow keeps this in step with the tag.
 console.info(
   `%c SCHWOERER-LUEFTUNG-CARDS %c ${CARD_VERSION} `,
   "color:#fff;background:#03a9f4;font-weight:700",

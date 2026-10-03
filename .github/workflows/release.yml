@@ -1,13 +1,26 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - 'v*'
-
-permissions:
-  contents: write
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to release, e.g. 1.2.3, or major, minor or patch
+        required: true
+        default: patch
 
 jobs:
+  # The same checks as every push, on the commit being released.
+  ci:
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
   release:
+    needs: ci
     uses: josa42/gha-workflows/.github/workflows/ha-release.yml@main
+    permissions:
+      contents: write
+    with:
+      version: ${{ inputs.version }}
+      version_files: |
+        schwoerer-lueftung-cards.js: const CARD_VERSION = "{version}";

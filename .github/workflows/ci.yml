@@ -1,6 +1,8 @@
 name: CI
 
 on:
+  # Lets release.yml run these checks on the commit it releases.
+  workflow_call:
   push:
     branches: [main]
   pull_request:
