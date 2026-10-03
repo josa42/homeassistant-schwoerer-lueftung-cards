@@ -12,6 +12,11 @@
 - **CI calls the shared workflows in josa42/actions.** They moved there from
   josa42/gha-workflows.
 
+- **`make release` starts the release workflow.** It releases a minor version
+  when a `feat` commit landed since the last release and a patch otherwise.
+  Pass `VERSION=major`, `VERSION=minor`, `VERSION=patch` or `VERSION=1.2.3`
+  to choose yourself. Without a release yet, it asks for the first version.
+
 ## 1.1.0
 
 - Updated styling
