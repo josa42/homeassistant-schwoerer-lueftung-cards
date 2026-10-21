@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Fixed
+
+- **The room card respects the house-wide Zusatzheizung permit.** With the
+  main unit's `auxiliary_heating_enabled` switch off, the Zusatzheizung line
+  reads `gesperrt (Haus)` instead of `bereit`.
+
 ### Changed
 
 - **Releases are built by the release workflow.** It runs CI, bumps the

@@ -11,8 +11,9 @@ any WGT unit.
 
 Two slots are matched by domain as well as type, because
 `auxiliary_heating_enabled_room` exists as both a switch and a binary sensor.
-Two more ignore the chosen device, because a room card needs the Zuluft
-temperature and the fan rate, and both live on the main unit.
+Three more ignore the chosen device, because a room card needs the Zuluft
+temperature, the fan rate and the house-wide heating permit, and all three
+live on the main unit.
 
 ## WGT Luftweg
 
@@ -47,11 +48,16 @@ default.
 | `base_temperature` | `base_temperature_room` | number | not drawn, reserved |
 | `supply_air` | `temperature_t4_after_reheater` | sensor | Zuluft, dot colour (main unit) |
 | `supply_flow` | `current_supply_air_flow` | sensor | dot speed (main unit) |
+| `aux_enabled_house` | `auxiliary_heating_enabled` | switch | Zusatzheizung, house-wide permit (main unit) |
 
 The Zusatzheizung line reads `heizt`, `bereit` or `gesperrt`. Whether heating is
 permitted and whether it is firing are two different registers, but the climate
 entity's `hvac_mode` is derived from the permit register rather than being one
 of its own, so the card states it once instead of twice.
+
+The room's permit only counts if the house-wide one is on too. When the main
+unit's `auxiliary_heating_enabled` switch is off, the line reads
+`gesperrt (Haus)`, so it is clear which switch to turn on.
 
 The room name comes from the area, falling back to the thermostat's name with
 the integration's prefix and suffix stripped.

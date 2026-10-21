@@ -689,6 +689,12 @@ const ROOM_SLOTS = {
     type: "current_supply_air_flow", domain: "sensor", global: true,
     label: "Luftleistung Zuluft",
   },
+  // Register 234 gates every room's auxiliary heater at once, whatever the
+  // room's own permit says.
+  aux_enabled_house: {
+    type: "auxiliary_heating_enabled", domain: "switch", global: true,
+    label: "Zusatzheizung Haus freigegeben",
+  },
 };
 
 // Half the air flow card's viewBox width, because a room card sits in one
@@ -987,15 +993,19 @@ class WgtRoomCard extends HTMLElement {
     // source and the switch only a fallback for a stripped-down setup.
     const hvac = climate?.state;
     const auxEnabled = hvac ? hvac === "heat" : this._state("aux_enabled") === "on";
+    // Missing on a unit without the heating module, so only an explicit off locks.
+    const houseLocked = this._state("aux_enabled_house") === "off";
     const auxActive = this._state("aux_active") === "on";
     const coil = this._q("[data-coil]");
     coil.setAttribute("stroke", auxActive ? "#ff9800" : "var(--disabled-text-color, #bdbdbd)");
     coil.classList.toggle("on", auxActive);
     this._q("[data-aux]").textContent = auxActive
       ? "heizt"
-      : auxEnabled
-        ? "bereit"
-        : "gesperrt";
+      : houseLocked
+        ? "gesperrt (Haus)"
+        : auxEnabled
+          ? "bereit"
+          : "gesperrt";
 
     const sched = this._state("scheduled");
     this._q("[data-scheduled]").textContent =
