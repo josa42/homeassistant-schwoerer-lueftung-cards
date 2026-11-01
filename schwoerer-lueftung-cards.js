@@ -70,19 +70,19 @@ const ROW_LABEL_DY = 46;
 const HOUSING = { x: 140, y: 30, w: 880, h: 360 };
 // Both enclosures share a top and a height so they read as one row of gear.
 const COMPONENTS = [
-  { x: 420, y: 56, w: 160, h: 320, title: "Wärmetauscher", state: "bypass" },
-  { x: 767, y: 56, w: 106, h: 320, title: "Wärmepumpe", state: "heat_pump" },
+  { x: 400, y: 56, w: 150, h: 320, title: "Wärmetauscher", state: "bypass" },
+  { x: 727, y: 56, w: 106, h: 320, title: "Wärmepumpe", state: "heat_pump" },
 ];
 
 const NODES = {
   outdoor: { x: 60, y: TOP_Y },
-  after_preheater: { x: 300, y: TOP_Y },
-  heat_exchanger: { x: 700, y: TOP_Y },
-  evaporator: { x: 820, y: TOP_Y },
-  exhaust: { x: 300, y: BOT_Y },
-  before_reheater: { x: 700, y: BOT_Y },
-  condenser: { x: 820, y: BOT_Y },
-  after_reheater: { x: 1010, y: BOT_Y },
+  after_preheater: { x: 290, y: TOP_Y },
+  heat_exchanger: { x: 660, y: TOP_Y },
+  evaporator: { x: 780, y: TOP_Y },
+  exhaust: { x: 290, y: BOT_Y },
+  before_reheater: { x: 660, y: BOT_Y },
+  condenser: { x: 780, y: BOT_Y },
+  after_reheater: { x: 950, y: BOT_Y },
 };
 
 // Each stream is ONE continuous path, so its dots keep a single phase from end
@@ -91,40 +91,41 @@ const NODES = {
 // simply hidden while it crosses one.
 //
 // The turns are quadratics whose control point IS the corner. The diagonals run
-// 380,110 -> 620,320 and 380,320 -> 620,110, crossing dead centre at 500,215.
+// 370,110 -> 580,320 and 370,320 -> 580,110, at 45°, crossing dead centre at
+// 475,215.
 //
 // `runs` splits each path only for COLOUR: a dot carries the reading of the last
 // sensor it passed, and the split points are where it passes one. A run with a
 // `to` blends from one reading to the other instead. That is the heat
-// exchanger, which the diagonals enter at x 420 and leave at x 580.
+// exchanger, which the diagonals enter at x 400 and leave at x 550.
 const STREAMS = [
   {
     name: "supply",
     runs: [
-      { from: "outdoor", d: "M99,110 L339,110" },
-      { from: "after_preheater", d: "L362,110 Q380,110 393.5,121.8 L420,145" },
-      { from: "after_preheater", to: "before_reheater", d: "L580,285" },
-      { from: "before_reheater", d: "L606.5,308.2 Q620,320 638,320 L739,320" },
-      { from: "before_reheater", d: "L859,320" },
-      { from: "condenser", d: "L1049,320" },
+      { from: "outdoor", d: "M99,110 L329,110" },
+      { from: "after_preheater", d: "L352,110 Q370,110 382.7,122.7 L400,140" },
+      { from: "after_preheater", to: "before_reheater", d: "L550,290" },
+      { from: "before_reheater", d: "L567.3,307.3 Q580,320 598,320 L699,320" },
+      { from: "before_reheater", d: "L819,320" },
+      { from: "condenser", d: "L989,320" },
       { from: "after_reheater", d: "L1094,320" },
     ],
   },
   {
     name: "exhaust",
     runs: [
-      { from: "exhaust", d: "M66,320 L362,320 Q380,320 393.5,308.2 L420,285" },
-      { from: "exhaust", to: "heat_exchanger", d: "L580,145" },
-      { from: "heat_exchanger", d: "L606.5,121.8 Q620,110 638,110 L859,110" },
+      { from: "exhaust", d: "M66,320 L352,320 Q370,320 382.7,307.3 L400,290" },
+      { from: "exhaust", to: "heat_exchanger", d: "L550,140" },
+      { from: "heat_exchanger", d: "L567.3,122.7 Q580,110 598,110 L819,110" },
       { from: "evaporator", d: "L1094,110" },
     ],
   },
 ];
 
 const COILS = [
-  { x: 200, y: TOP_Y, tag: "VHR", label: "Vorheizregister",
+  { x: 210, y: TOP_Y, tag: "VHR", label: "Vorheizregister",
     labelY: 47, labelClass: "component-title" },
-  { x: 915, y: BOT_Y, tag: "NE", label: "Nachheizregister",
+  { x: 865, y: BOT_Y, tag: "NE", label: "Nachheizung",
     labelY: BOT_Y - 28, labelClass: "label" },
 ];
 
@@ -135,7 +136,7 @@ const TERMINALS = [
   { x: 1100, y: BOT_Y, caption: "Zuluft", capped: true, flow: "supply_flow" },
 ];
 
-const HP_LINK = { x: 820, top: 137, bottom: 293 };
+const HP_LINK = { x: 780, top: 137, bottom: 293 };
 
 // Length of an M/L/Q/C path, so a dot's duration can be derived from the
 // distance it covers and every duct runs at one constant speed.
@@ -518,8 +519,8 @@ class WgtAirFlowCard extends HTMLElement {
                 <text x="${c.x}" y="${c.labelY}" class="${c.labelClass}">${c.label}</text>`
             ).join("")}
             <g class="node" data-slot="bypass">
-              <rect x="425" y="60" width="150" height="24" class="hit"/>
-              <text x="500" y="76" class="sub" data-sub="bypass"></text>
+              <rect x="405" y="60" width="140" height="24" class="hit"/>
+              <text x="475" y="76" class="sub" data-sub="bypass"></text>
             </g>
             <g class="node" data-slot="heat_pump">
               <rect x="${HP_LINK.x - 50}" y="60" width="100" height="24" class="hit"/>
