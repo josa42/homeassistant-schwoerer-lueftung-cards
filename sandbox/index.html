@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>WGT Luftweg Sandbox</title>
+<title>WGT Sandbox</title>
 <style>
   :root {
     --primary-text-color: #1f2937; --secondary-text-color: #6b7280;
@@ -19,11 +19,18 @@
   select, input { font: inherit; }
   .temps { max-width: 1160px; margin: 16px auto 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }
   .temps input { width: 64px; }
+  [hidden] { display: none !important; }
   #mount { margin: 0 auto; }
+  /* a room card sits in one column of a two-column view */
+  #room-mount { margin: 0 auto; max-width: 580px; }
+  .controls input[type=number] { width: 64px; }
 </style>
 </head>
 <body>
 <div class="controls">
+  <label>Karte
+    <select id="card"><option value="air">Luftweg</option><option value="room">Raum</option></select>
+  </label>
   <label>Szenario
     <select id="scenario">
       <option value="heating">31.10. WP heizt</option>
@@ -31,19 +38,30 @@
       <option value="cooling">Sommer, WP kühlt (geschätzt)</option>
     </select>
   </label>
+  <label>Luftleistung <input id="flow" type="range" min="0" max="100" value="35"><span id="flowv">35 %</span></label>
+  <label>Breite <input id="width" type="range" min="300" max="1160" step="10" value="1160"><span id="widthv">1160 px</span></label>
+  <label><input id="dark" type="checkbox"> Dunkel</label>
+</div>
+<div class="controls" data-card="air">
   <label>Wärmepumpe
     <select id="hp"><option>heating</option><option>cooling</option><option>off</option><option>unavailable</option></select>
   </label>
   <label>Bypass
     <select id="bypass"><option>closed</option><option>open</option><option>open_cooling</option><option>open_heating</option></select>
   </label>
-  <label>Luftleistung <input id="flow" type="range" min="0" max="100" value="35"><span id="flowv">35 %</span></label>
-  <label>Breite <input id="width" type="range" min="300" max="1160" step="10" value="1160"><span id="widthv">1160 px</span></label>
   <label><input id="compact" type="checkbox"> Kompakt</label>
-  <label><input id="dark" type="checkbox"> Dunkel</label>
 </div>
-<div id="mount"></div>
-<div class="temps" id="temps"></div>
+<div class="controls" data-card="room">
+  <label>Ist <input id="room-ist" type="number" step="0.1"> °C</label>
+  <label>Soll <input id="room-soll" type="number" step="0.5"> °C</label>
+  <label>Thermostat <select id="room-hvac"><option>heat</option><option>off</option></select></label>
+  <label><input id="room-aux" type="checkbox"> Zusatzheizung heizt</label>
+  <label><input id="room-house" type="checkbox"> Haus freigegeben</label>
+  <label><input id="room-sched" type="checkbox"> Zeitprogramm</label>
+</div>
+<div id="mount" data-card="air"></div>
+<div class="temps" id="temps" data-card="air"></div>
+<div id="room-mount" data-card="room"></div>
 
 <script>
   // The card wraps itself in <ha-card>; outside HA that is just a block.
@@ -72,10 +90,16 @@
       t: { T10: 30.0, T2: 30.0, T3: 26.5, T8: 12.0, T4: 16.0, T5: 24.0, T6: 27.5, T7: 40.0 } },
   };
 
-  const state = { hp: "heating", bypass: "closed", flow: 35, t: {} };
+  // The room is the winter afternoon of the preview GIF: just under its
+  // setpoint, with the auxiliary heater running.
+  const state = {
+    hp: "heating", bypass: "closed", flow: 35, t: {},
+    room: { ist: 20.8, soll: 21.5, hvac: "heat", aux: true, house: true, sched: true },
+  };
   const card = document.createElement("wgt-air-flow-card");
-  // Width, Kompakt and Dunkel live in the URL (?width=360&compact&dark), so a
-  // reload keeps them and a screenshot needs no click or a window that small.
+  // The card, width, Kompakt and Dunkel live in the URL
+  // (?card=room&width=360&compact&dark), so a reload keeps them and a
+  // screenshot needs no click or a window that small.
   const params = new URLSearchParams(location.search);
   function saveParam(name, value) {
     if (value === null) params.delete(name);
@@ -87,6 +111,9 @@
   document.getElementById("compact").checked = compact;
   card.setConfig({ type: "custom:wgt-air-flow-card", device_id: "wgt", compact });
   document.getElementById("mount").append(card);
+  const roomCard = document.createElement("wgt-room-card");
+  roomCard.setConfig({ type: "custom:wgt-room-card", device_id: "room" });
+  document.getElementById("room-mount").append(roomCard);
 
   const temps = document.getElementById("temps");
   for (const [, tag] of SENSORS) {
@@ -98,23 +125,47 @@
   function hass() {
     const states = {};
     const entities = {};
-    const add = (id, type, value) => {
-      states[id] = { state: String(value), attributes: { entity_type: type } };
-      entities[id] = { device_id: "wgt" };
+    const add = (id, type, value, attributes = {}, device_id = "wgt") => {
+      states[id] = { state: String(value), attributes: { entity_type: type, ...attributes } };
+      entities[id] = { device_id };
     };
     for (const [type, tag] of SENSORS) add(`sensor.wgt_${tag.toLowerCase()}`, type, state.t[tag]);
     add("sensor.wgt_heat_pump", "heat_pump_status", state.hp);
     add("sensor.wgt_bypass", "bypass_state", state.bypass);
     add("sensor.wgt_supply_flow", "current_supply_air_flow", state.flow);
     add("sensor.wgt_exhaust_flow", "current_exhaust_air_flow", state.flow);
-    return { states, entities };
+    const room = state.room;
+    const onOff = (b) => (b ? "on" : "off");
+    add("switch.wgt_aux_heating", "auxiliary_heating_enabled", onOff(room.house));
+    add("sensor.room_temperature", "current_temperature_room", room.ist, {}, "room");
+    add("climate.room", "climate_room", room.hvac, { temperature: room.soll }, "room");
+    add("binary_sensor.room_aux_active", "auxiliary_heating_active_room", onOff(room.aux), {}, "room");
+    add("switch.room_aux_enabled", "auxiliary_heating_enabled_room", onOff(room.hvac === "heat"), {}, "room");
+    add("switch.room_scheduled", "scheduled_heating_enabled_room", onOff(room.sched), {}, "room");
+    add("number.room_base", "base_temperature_room", room.soll, {}, "room");
+    return { states, entities, devices: { room: { area_id: "wohnzimmer" } }, areas: { wohnzimmer: { name: "Wohnzimmer" } } };
   }
 
   function sync() {
     document.getElementById("hp").value = state.hp;
     document.getElementById("bypass").value = state.bypass;
     for (const i of temps.querySelectorAll("input")) i.value = state.t[i.dataset.tag];
-    card.hass = hass();
+    const room = state.room;
+    document.getElementById("room-ist").value = room.ist;
+    document.getElementById("room-soll").value = room.soll;
+    document.getElementById("room-hvac").value = room.hvac;
+    document.getElementById("room-aux").checked = room.aux;
+    document.getElementById("room-house").checked = room.house;
+    document.getElementById("room-sched").checked = room.sched;
+    push();
+  }
+
+  // Hands both cards the same state without touching the inputs, so typing
+  // into one is not rewritten under the cursor.
+  function push() {
+    const h = hass();
+    card.hass = h;
+    roomCard.hass = h;
   }
 
   function loadScenario(name) {
@@ -137,6 +188,7 @@
     document.getElementById("width").value = px;
     document.getElementById("widthv").textContent = `${px} px`;
     document.getElementById("mount").style.maxWidth = `${px}px`;
+    document.getElementById("room-mount").style.maxWidth = `${Math.min(px, 580)}px`;
   }
   document.getElementById("width").oninput = (e) => {
     setWidth(Number(e.target.value));
@@ -157,10 +209,32 @@
     saveParam("dark", e.target.checked ? "" : null);
   };
   setDark(params.has("dark"));
+
+  // One card at a time, each with its own controls. The room card reads T4
+  // and the fan rate off the main unit, so the scenario drives it as well.
+  function setCard(name) {
+    document.getElementById("card").value = name;
+    for (const el of document.querySelectorAll("[data-card]")) el.hidden = el.dataset.card !== name;
+  }
+  document.getElementById("card").onchange = (e) => {
+    setCard(e.target.value);
+    saveParam("card", e.target.value === "air" ? null : e.target.value);
+  };
+  setCard(params.get("card") === "room" ? "room" : "air");
   temps.oninput = (e) => {
     const v = Number.parseFloat(e.target.value);
-    if (Number.isFinite(v)) { state.t[e.target.dataset.tag] = v; card.hass = hass(); }
+    if (Number.isFinite(v)) { state.t[e.target.dataset.tag] = v; push(); }
   };
+  for (const [id, key] of [["room-ist", "ist"], ["room-soll", "soll"]]) {
+    document.getElementById(id).oninput = (e) => {
+      const v = Number.parseFloat(e.target.value);
+      if (Number.isFinite(v)) { state.room[key] = v; push(); }
+    };
+  }
+  document.getElementById("room-hvac").onchange = (e) => { state.room.hvac = e.target.value; sync(); };
+  for (const [id, key] of [["room-aux", "aux"], ["room-house", "house"], ["room-sched", "sched"]]) {
+    document.getElementById(id).onchange = (e) => { state.room[key] = e.target.checked; sync(); };
+  }
   addEventListener("hass-more-info", (e) => console.log("more-info", e.detail.entityId));
 
   loadScenario("heating");
