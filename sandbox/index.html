@@ -37,6 +37,7 @@
     <select id="bypass"><option>closed</option><option>open</option><option>open_cooling</option><option>open_heating</option></select>
   </label>
   <label>Luftleistung <input id="flow" type="range" min="0" max="100" value="35"><span id="flowv">35 %</span></label>
+  <label><input id="compact" type="checkbox"> Kompakt</label>
   <label><input id="dark" type="checkbox"> Dunkel</label>
 </div>
 <div id="mount"></div>
@@ -71,7 +72,10 @@
 
   const state = { hp: "heating", bypass: "closed", flow: 35, t: {} };
   const card = document.createElement("wgt-air-flow-card");
-  card.setConfig({ type: "custom:wgt-air-flow-card", device_id: "wgt" });
+  // ?compact opens the compact layout, for a screenshot without a click
+  const compact = new URLSearchParams(location.search).has("compact");
+  document.getElementById("compact").checked = compact;
+  card.setConfig({ type: "custom:wgt-air-flow-card", device_id: "wgt", compact });
   document.getElementById("mount").append(card);
 
   const temps = document.getElementById("temps");
@@ -116,6 +120,10 @@
     state.flow = Number(e.target.value);
     document.getElementById("flowv").textContent = `${state.flow} %`;
     sync();
+  };
+  document.getElementById("compact").onchange = (e) => {
+    card.setConfig({ type: "custom:wgt-air-flow-card", device_id: "wgt", compact: e.target.checked });
+    card.hass = hass();
   };
   document.getElementById("dark").onchange = (e) => document.body.classList.toggle("dark", e.target.checked);
   temps.oninput = (e) => {

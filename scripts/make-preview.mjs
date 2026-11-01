@@ -16,7 +16,7 @@ const geo = await import(
   'data:text/javascript;base64,' +
     Buffer.from(
       src.replace(/customElements\.define\([^)]*\);/g, '') +
-        '\nexport { STREAMS, HP_LINK, ROOM_DUCT, ROOM_DUCT_LEN, DOT_SPACING };'
+        '\nexport { LAYOUTS, ROOM_DUCT, ROOM_DUCT_LEN, DOT_SPACING };'
     ).toString('base64')
 );
 
@@ -164,20 +164,22 @@ const ROOM = mount(
   ])
 );
 
+const hpLink = geo.LAYOUTS.full.hpLink;
+
 const targets = [
   {
     name: 'wgt-air-flow-card',
     card: AIR_FLOW,
     width: 1000,
     scope: 'wgt-af',
-    plans: geo.STREAMS.map((s) => ({
+    plans: geo.LAYOUTS.full.streams.map((s) => ({
       path: sampler(s.d),
       len: s.len,
       speed: AIR_FLOW._speed(s.name),
       count: Math.max(1, Math.round(s.len / geo.DOT_SPACING)),
       fill: AIR_FLOW._fillKeys(s),
     })),
-    hp: { len: geo.HP_LINK.bottom - geo.HP_LINK.top, x: geo.HP_LINK.x, top: geo.HP_LINK.top },
+    hp: { len: hpLink.bottom - hpLink.top, x: hpLink.x, top: hpLink.top },
   },
   {
     name: 'wgt-room-card',

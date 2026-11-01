@@ -61,82 +61,118 @@ const SLOTS = {
 // one straight diagonal through the heat exchanger where the two cross, a
 // single turn back, and a second horizontal run through the heat pump. Two
 // corners per stream, no more.
+//
+// The compact layout is the same diagram with the two rows pulled together. It
+// keeps every sensor and the dots, and drops the row labels and the titles.
 const NODE_W = 78;
 const NODE_H = 54;
-const TOP_Y = 110;
-const BOT_Y = 320;
-const ROW_LABEL_DY = 46;
 
-const HOUSING = { x: 140, y: 30, w: 880, h: 360 };
-// Both enclosures share a top and a height so they read as one row of gear.
-const COMPONENTS = [
-  { x: 400, y: 56, w: 150, h: 320, title: "Wärmetauscher", state: "bypass" },
-  { x: 727, y: 56, w: 106, h: 320, title: "Wärmepumpe", state: "heat_pump" },
-];
+function airFlowLayout(compact) {
+  const top = compact ? 52 : 110;
+  const bot = compact ? 172 : 320;
+  const rise = bot - top;
+  const round = (n) => Number(n.toFixed(1));
 
-const NODES = {
-  outdoor: { x: 60, y: TOP_Y },
-  after_preheater: { x: 290, y: TOP_Y },
-  heat_exchanger: { x: 660, y: TOP_Y },
-  evaporator: { x: 780, y: TOP_Y },
-  exhaust: { x: 290, y: BOT_Y },
-  before_reheater: { x: 660, y: BOT_Y },
-  condenser: { x: 780, y: BOT_Y },
-  after_reheater: { x: 950, y: BOT_Y },
-};
+  // Each stream is ONE continuous path, so its dots keep a single phase from
+  // end to end: even spacing, nothing appearing or vanishing at a join. The
+  // path runs straight behind the node boxes and coils, which are drawn on top,
+  // so a dot is simply hidden while it crosses one.
+  //
+  // The diagonals run from x 370 to x 580 and cross dead centre at x 475; in
+  // the full layout that is 45°. The turns are quadratics whose control point
+  // IS the corner, with 18 px of straight on either side.
+  //
+  // `runs` splits each path only for COLOUR: a dot carries the reading of the
+  // last sensor it passed, and the split points are where it passes one. A run
+  // with a `to` blends from one reading to the other instead. That is the heat
+  // exchanger, which the diagonals enter at x 400 and leave at x 550.
+  const span = 210;
+  const ux = (18 * span) / Math.hypot(span, rise);
+  const uy = (18 * rise) / Math.hypot(span, rise);
+  const near = round(top + (30 / span) * rise);
+  const far = round(top + (180 / span) * rise);
+  const streams = [
+    {
+      name: "supply",
+      runs: [
+        { from: "outdoor", d: `M99,${top} L329,${top}` },
+        { from: "after_preheater",
+          d: `L352,${top} Q370,${top} ${round(370 + ux)},${round(top + uy)} L400,${near}` },
+        { from: "after_preheater", to: "before_reheater", d: `L550,${far}` },
+        { from: "before_reheater",
+          d: `L${round(580 - ux)},${round(bot - uy)} Q580,${bot} 598,${bot} L699,${bot}` },
+        { from: "before_reheater", d: `L819,${bot}` },
+        { from: "condenser", d: `L989,${bot}` },
+        { from: "after_reheater", d: `L1094,${bot}` },
+      ],
+    },
+    {
+      name: "exhaust",
+      runs: [
+        { from: "exhaust",
+          d: `M66,${bot} L352,${bot} Q370,${bot} ${round(370 + ux)},${round(bot - uy)} L400,${round(top + bot - near)}` },
+        { from: "exhaust", to: "heat_exchanger", d: `L550,${round(top + bot - far)}` },
+        { from: "heat_exchanger",
+          d: `L${round(580 - ux)},${round(top + uy)} Q580,${top} 598,${top} L819,${top}` },
+        { from: "evaporator", d: `L1094,${top}` },
+      ],
+    },
+  ];
+  for (const stream of streams) {
+    stream.d = stream.runs.map((r) => r.d).join(" ");
+    let acc = "";
+    stream.stops = stream.runs.map((r) => {
+      acc += (acc ? " " : "") + r.d;
+      return pathLength(acc);
+    });
+    stream.len = stream.stops[stream.stops.length - 1];
+  }
 
-// Each stream is ONE continuous path, so its dots keep a single phase from end
-// to end: even spacing, nothing appearing or vanishing at a join. The path runs
-// straight behind the node boxes and coils, which are drawn on top, so a dot is
-// simply hidden while it crosses one.
-//
-// The turns are quadratics whose control point IS the corner. The diagonals run
-// 370,110 -> 580,320 and 370,320 -> 580,110, at 45°, crossing dead centre at
-// 475,215.
-//
-// `runs` splits each path only for COLOUR: a dot carries the reading of the last
-// sensor it passed, and the split points are where it passes one. A run with a
-// `to` blends from one reading to the other instead. That is the heat
-// exchanger, which the diagonals enter at x 400 and leave at x 550.
-const STREAMS = [
-  {
-    name: "supply",
-    runs: [
-      { from: "outdoor", d: "M99,110 L329,110" },
-      { from: "after_preheater", d: "L352,110 Q370,110 382.7,122.7 L400,140" },
-      { from: "after_preheater", to: "before_reheater", d: "L550,290" },
-      { from: "before_reheater", d: "L567.3,307.3 Q580,320 598,320 L699,320" },
-      { from: "before_reheater", d: "L819,320" },
-      { from: "condenser", d: "L989,320" },
-      { from: "after_reheater", d: "L1094,320" },
+  // Both enclosures share a top and a height so they read as one row of gear.
+  const component = compact ? { y: 16, h: 190 } : { y: 56, h: 320 };
+
+  return {
+    compact,
+    height: compact ? 222 : 415,
+    housing: compact ? { x: 140, y: 8, w: 880, h: 206 } : { x: 140, y: 30, w: 880, h: 360 },
+    components: [
+      { x: 400, w: 150, ...component, title: "Wärmetauscher" },
+      { x: 727, w: 106, ...component, title: "Wärmepumpe" },
     ],
-  },
-  {
-    name: "exhaust",
-    runs: [
-      { from: "exhaust", d: "M66,320 L352,320 Q370,320 382.7,307.3 L400,290" },
-      { from: "exhaust", to: "heat_exchanger", d: "L550,140" },
-      { from: "heat_exchanger", d: "L567.3,122.7 Q580,110 598,110 L819,110" },
-      { from: "evaporator", d: "L1094,110" },
+    nodes: {
+      outdoor: { x: 60, y: top },
+      after_preheater: { x: 290, y: top },
+      heat_exchanger: { x: 660, y: top },
+      evaporator: { x: 780, y: top },
+      exhaust: { x: 290, y: bot },
+      before_reheater: { x: 660, y: bot },
+      condenser: { x: 780, y: bot },
+      after_reheater: { x: 950, y: bot },
+    },
+    streams,
+    coils: [
+      { x: 210, y: top, tag: "VHR", label: "Vorheizregister",
+        labelY: 47, labelClass: "component-title" },
+      { x: 865, y: bot, tag: "NE", label: "Nachheizung",
+        labelY: bot - 28, labelClass: "label" },
     ],
-  },
-];
-
-const COILS = [
-  { x: 210, y: TOP_Y, tag: "VHR", label: "Vorheizregister",
-    labelY: 47, labelClass: "component-title" },
-  { x: 865, y: BOT_Y, tag: "NE", label: "Nachheizung",
-    labelY: BOT_Y - 28, labelClass: "label" },
-];
-
-const TERMINALS = [
-  { x: 60, y: TOP_Y, caption: "Außenluft", capped: false },
-  { x: 60, y: BOT_Y, caption: "Abluft", capped: true, flow: "exhaust_flow" },
-  { x: 1100, y: TOP_Y, caption: "Fortluft", capped: true },
-  { x: 1100, y: BOT_Y, caption: "Zuluft", capped: true, flow: "supply_flow" },
-];
-
-const HP_LINK = { x: 780, top: 137, bottom: 293 };
+    terminals: [
+      { x: 60, y: top, caption: "Außenluft", capped: false },
+      { x: 60, y: bot, caption: "Abluft", capped: true, flow: "exhaust_flow" },
+      { x: 1100, y: top, caption: "Fortluft", capped: true },
+      { x: 1100, y: bot, caption: "Zuluft", capped: true, flow: "supply_flow" },
+    ],
+    // Below a node in the full layout. In the compact one only the flow rate
+    // under Abluft and Zuluft is left, and those terminals have no node.
+    rowLabelDy: compact ? 32 : 46,
+    hpLink: { x: 780, top: top + NODE_H / 2, bottom: bot - NODE_H / 2 },
+    // In the full layout both states sit under their component's title. The
+    // compact one has no room above the heat pump's nodes, so its state sits
+    // between them, beside the link.
+    bypassText: { x: 475, y: compact ? 38 : 76 },
+    heatPumpText: compact ? { x: 806, y: (top + bot) / 2 + 4 } : { x: 780, y: 76 },
+  };
+}
 
 // Length of an M/L/Q/C path, so a dot's duration can be derived from the
 // distance it covers and every duct runs at one constant speed.
@@ -186,15 +222,7 @@ function pathLength(d) {
   return len;
 }
 
-for (const stream of STREAMS) {
-  stream.d = stream.runs.map((r) => r.d).join(" ");
-  let acc = "";
-  stream.stops = stream.runs.map((r) => {
-    acc += (acc ? " " : "") + r.d;
-    return pathLength(acc);
-  });
-  stream.len = stream.stops[stream.stops.length - 1];
-}
+const LAYOUTS = { full: airFlowLayout(false), compact: airFlowLayout(true) };
 
 const DOT_GREY = "#9e9e9e";
 // How many steps a blending run is cut into. The temperature scale bends
@@ -285,6 +313,9 @@ class WgtAirFlowCard extends HTMLElement {
 
   setConfig(config) {
     this._config = { ...config };
+    const layout = config.compact ? LAYOUTS.compact : LAYOUTS.full;
+    if (layout !== this._layout) this._built = false;
+    this._layout = layout;
     this._resolved = null;
     this._signature = null;
     this._dotSig = null;
@@ -338,23 +369,6 @@ class WgtAirFlowCard extends HTMLElement {
     if (pct <= 0) return 0;
     const f = Math.min(1, pct / 100);
     return 170 * f * f;
-  }
-
-  _node(slot) {
-    const { x, y } = NODES[slot];
-    const meta = SLOTS[slot];
-    const v = this._num(slot);
-    const id = this._entities()[slot];
-    return `
-      <g class="node" data-entity="${esc(id || "")}">
-        <rect x="${x - NODE_W / 2}" y="${y - NODE_H / 2}" width="${NODE_W}" height="${NODE_H}"
-              rx="13" class="ring" stroke="${tempColor(v)}"/>
-        <text x="${x}" y="${y - 7}" class="tag">${esc(meta.tag)}</text>
-        <text x="${x}" y="${y + 14}" class="val">${v === null ? "–" : `${v.toFixed(1)}°`}</text>
-        ${meta.label
-          ? `<text x="${x}" y="${y + ROW_LABEL_DY}" class="label">${esc(meta.label)}</text>`
-          : ""}
-      </g>`;
   }
 
   // The fill keyframes of one stream, as fractions of its path, so the fill
@@ -431,11 +445,12 @@ class WgtAirFlowCard extends HTMLElement {
     }
     // Heat leaves the evaporator (top) for the condenser (bottom) when heating,
     // the other way when cooling, so the dots follow the actual transfer.
+    const link = this._layout.hpLink;
     const d =
       hpState === "cooling"
-        ? `M${HP_LINK.x},${HP_LINK.bottom} L${HP_LINK.x},${HP_LINK.top}`
-        : `M${HP_LINK.x},${HP_LINK.top} L${HP_LINK.x},${HP_LINK.bottom}`;
-    const dur = Number(((HP_LINK.bottom - HP_LINK.top) / 60).toFixed(2));
+        ? `M${link.x},${link.bottom} L${link.x},${link.top}`
+        : `M${link.x},${link.top} L${link.x},${link.bottom}`;
+    const dur = Number(((link.bottom - link.top) / 60).toFixed(2));
     const f0 = this._phaseOf("hp", dur, now);
     const color = HEAT_PUMP_COLORS[hpState] || "#9e9e9e";
     let out = "";
@@ -451,7 +466,9 @@ class WgtAirFlowCard extends HTMLElement {
   // Built once. Everything that varies is patched in place by _update, so the
   // running animations are never torn down by an unrelated state change.
   _build() {
-    const linkD = `M${HP_LINK.x},${HP_LINK.top} L${HP_LINK.x},${HP_LINK.bottom}`;
+    const L = this._layout;
+    const link = L.hpLink;
+    const linkD = `M${link.x},${link.top} L${link.x},${link.bottom}`;
     this.innerHTML = `
       <ha-card class="wgt-af">
         <style>
@@ -491,51 +508,51 @@ class WgtAirFlowCard extends HTMLElement {
           .wgt-af .node:hover .hit { fill: var(--secondary-text-color); fill-opacity: .1; }
         </style>
         <div class="wrap">
-          <svg viewBox="0 0 1160 415" role="img" aria-label="WGT Luftweg mit Temperaturen">
-            <rect x="${HOUSING.x}" y="${HOUSING.y}" width="${HOUSING.w}" height="${HOUSING.h}"
+          <svg viewBox="0 0 1160 ${L.height}" role="img" aria-label="WGT Luftweg mit Temperaturen">
+            <rect x="${L.housing.x}" y="${L.housing.y}" width="${L.housing.w}" height="${L.housing.h}"
                   rx="20" class="housing"/>
-            ${STREAMS.map((s) => `<path d="${s.d}" class="duct"/>`).join("")}
-            ${COMPONENTS.map(
+            ${L.streams.map((s) => `<path d="${s.d}" class="duct"/>`).join("")}
+            ${L.components.map(
               (c) => `<rect x="${c.x}" y="${c.y}" width="${c.w}" height="${c.h}" rx="14" class="component"/>
-                <text x="${c.x + c.w / 2}" y="${c.y - 9}" class="component-title">${c.title}</text>`
+                ${L.compact ? "" : `<text x="${c.x + c.w / 2}" y="${c.y - 9}" class="component-title">${c.title}</text>`}`
             ).join("")}
-            ${STREAMS.map((s) => `<path d="${s.d}" class="line"/>`).join("")}
+            ${L.streams.map((s) => `<path d="${s.d}" class="line"/>`).join("")}
             <path d="${linkD}" class="line hp-link" data-hp-link/>
             <g data-dots></g>
             <g data-hp-dots></g>
-            ${TERMINALS.map(
+            ${L.terminals.map(
               (t) => `${t.capped ? `<circle cx="${t.x}" cy="${t.y}" r="6" class="cap"/>` : ""}
                 <text x="${t.x}" y="${t.y - 36}" class="caption">${esc(t.caption.toUpperCase())}</text>
                 ${t.flow
                   ? `<g class="node" data-slot="${t.flow}">
-                      <rect x="${t.x - 55}" y="${t.y + ROW_LABEL_DY - 17}" width="110" height="24" class="hit"/>
-                      <text x="${t.x}" y="${t.y + ROW_LABEL_DY}" class="label" data-flow="${t.flow}"></text>
+                      <rect x="${t.x - 55}" y="${t.y + L.rowLabelDy - 17}" width="110" height="24" class="hit"/>
+                      <text x="${t.x}" y="${t.y + L.rowLabelDy}" class="label" data-flow="${t.flow}"></text>
                     </g>`
                   : ""}`
             ).join("")}
-            ${COILS.map(
+            ${L.coils.map(
               (c) => `<circle cx="${c.x}" cy="${c.y}" r="17" class="coil"/>
                 <text x="${c.x}" y="${c.y + 4}" class="coil-tag">${c.tag}</text>
-                <text x="${c.x}" y="${c.labelY}" class="${c.labelClass}">${c.label}</text>`
+                ${L.compact ? "" : `<text x="${c.x}" y="${c.labelY}" class="${c.labelClass}">${c.label}</text>`}`
             ).join("")}
             <g class="node" data-slot="bypass">
-              <rect x="405" y="60" width="140" height="24" class="hit"/>
-              <text x="475" y="76" class="sub" data-sub="bypass"></text>
+              <rect x="${L.bypassText.x - 70}" y="${L.bypassText.y - 16}" width="140" height="24" class="hit"/>
+              <text x="${L.bypassText.x}" y="${L.bypassText.y}" class="sub" data-sub="bypass"></text>
             </g>
             <g class="node" data-slot="heat_pump">
-              <rect x="${HP_LINK.x - 50}" y="60" width="100" height="24" class="hit"/>
-              <text x="${HP_LINK.x}" y="76" class="sub" data-sub="heat_pump"></text>
+              <rect x="${L.heatPumpText.x - 50}" y="${L.heatPumpText.y - 16}" width="100" height="24" class="hit"/>
+              <text x="${L.heatPumpText.x}" y="${L.heatPumpText.y}" class="sub" data-sub="heat_pump"></text>
             </g>
-            ${Object.keys(NODES).map((slot) => {
-              const { x, y } = NODES[slot];
+            ${Object.keys(L.nodes).map((slot) => {
+              const { x, y } = L.nodes[slot];
               const meta = SLOTS[slot];
               return `<g class="node" data-slot="${slot}">
                 <rect x="${x - NODE_W / 2}" y="${y - NODE_H / 2}" width="${NODE_W}" height="${NODE_H}"
                       rx="13" class="ring"/>
                 <text x="${x}" y="${y - 7}" class="tag">${esc(meta.tag)}</text>
                 <text x="${x}" y="${y + 14}" class="val"></text>
-                ${meta.label
-                  ? `<text x="${x}" y="${y + ROW_LABEL_DY}" class="label">${esc(meta.label)}</text>`
+                ${meta.label && !L.compact
+                  ? `<text x="${x}" y="${y + L.rowLabelDy}" class="label">${esc(meta.label)}</text>`
                   : ""}
               </g>`;
             }).join("")}
@@ -578,10 +595,11 @@ class WgtAirFlowCard extends HTMLElement {
   }
 
   _update() {
+    const L = this._layout;
     const ids = this._entities();
     const now = this._svgEl.getCurrentTime ? this._svgEl.getCurrentTime() : 0;
 
-    for (const slot of Object.keys(NODES)) {
+    for (const slot of Object.keys(L.nodes)) {
       const v = this._num(slot);
       const g = this._nodeEls[slot];
       g.setAttribute("data-entity", ids[slot] || "");
@@ -609,7 +627,7 @@ class WgtAirFlowCard extends HTMLElement {
     this._hpLinkEl.setAttribute("stroke", HEAT_PUMP_COLORS[hpState] || GREY);
     this._hpLinkEl.classList.toggle("idle", !hpOn);
 
-    for (const t of TERMINALS) {
+    for (const t of L.terminals) {
       if (!t.flow) continue;
       const v = this._num(t.flow);
       this._flowEls[t.flow].textContent = v === null ? "" : `${v} %`;
@@ -617,12 +635,12 @@ class WgtAirFlowCard extends HTMLElement {
 
     // Re-issue dots only when their speed or quantised colours actually change;
     // _phaseOf then makes that swap invisible.
-    const dotSig = STREAMS.map(
+    const dotSig = L.streams.map(
       (s) => this._speed(s.name) + ":" + this._fillKeys(s).values.join(",")
     ).join("|");
     if (dotSig !== this._dotSig) {
       this._dotSig = dotSig;
-      this._dotsEl.innerHTML = STREAMS.map((s) => this._dotsMarkup(s, now)).join("");
+      this._dotsEl.innerHTML = L.streams.map((s) => this._dotsMarkup(s, now)).join("");
     }
     const hpSig = hpOn ? hpState : "off";
     if (hpSig !== this._hpSig) {
@@ -630,7 +648,7 @@ class WgtAirFlowCard extends HTMLElement {
       this._hpDotsEl.innerHTML = this._hpDotsMarkup(hpState, now);
     }
 
-    this._warnEl.hidden = Object.keys(NODES).some((slot) => ids[slot]);
+    this._warnEl.hidden = Object.keys(L.nodes).some((slot) => ids[slot]);
   }
 
   _render() {
@@ -639,7 +657,7 @@ class WgtAirFlowCard extends HTMLElement {
   }
 
   getCardSize() {
-    return 6;
+    return this._layout === LAYOUTS.compact ? 3 : 6;
   }
 }
 
@@ -657,6 +675,7 @@ class WgtAirFlowCardEditor extends HTMLElement {
   _schema() {
     return [
       { name: "device_id", selector: { device: { integration: "schwoerer_lueftung" } } },
+      { name: "compact", selector: { boolean: {} } },
     ];
   }
 
@@ -665,11 +684,12 @@ class WgtAirFlowCardEditor extends HTMLElement {
     if (!this._form) {
       this._form = document.createElement("ha-form");
       this._form.computeLabel = (s) =>
-        ({ device_id: "WGT-Gerät" })[s.name] || s.name;
+        ({ device_id: "WGT-Gerät", compact: "Kompakt" })[s.name] || s.name;
       this._form.addEventListener("value-changed", (ev) => {
         ev.stopPropagation();
         const next = { ...ev.detail.value };
         if (!next.device_id) delete next.device_id;
+        if (!next.compact) delete next.compact;
         this.dispatchEvent(
           new CustomEvent("config-changed", {
             detail: { config: next },

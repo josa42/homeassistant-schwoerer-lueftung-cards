@@ -51,8 +51,12 @@ device_id: 6b2e84d05c1af739e8b4260d95c1f7a2
 
 ## Configuration
 
-Pick the device in the visual editor. That is the whole configuration. Both
-cards work out their entities from it, and name themselves.
+Pick the device in the visual editor. Both cards work out their entities from
+it, and name themselves.
+
+The Luftweg card has one option more, `compact: true` (Kompakt in the editor).
+It shows the same diagram at about half the height, without the labels under
+the sensors and the component titles.
 
 <br><br>
 
