@@ -81,7 +81,8 @@ Heat pump off at 12:21:
 T3 therefore sits between the heat exchanger and the condenser, and T6
 between the heat exchanger and the evaporator. The register list calls T6
 "im WT", but it measures the exhaust air leaving the heat exchanger, so the
-card labels it "nach WT".
+card labels it "nach WT". It calls T3 "vor NE", which is true but skips the
+whole heat pump in between, so the card labels it "vor WP".
 
 The heat exchanger's temperature ratio confirms both. At 10:40, with the heat
 pump off, T2 read 10.0 and T5 21.5:

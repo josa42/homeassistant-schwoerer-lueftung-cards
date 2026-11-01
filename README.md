@@ -55,9 +55,11 @@ device_id: 6b2e84d05c1af739e8b4260d95c1f7a2
 Pick the device in the visual editor. Both cards work out their entities from
 it, and name themselves.
 
-The Luftweg card has one option more, `compact: true` (Kompakt in the editor).
-It shows the same diagram at about half the height, without the labels under
-the sensors and the component titles.
+The Luftweg card has two options more. `compact: true` (Kompakt in the
+editor) shows the same diagram at about half the height, without the labels
+under the sensors and the component titles. `reheater: false` (Nachheizregister
+vorhanden, off) leaves out the NE for a unit without one; the card cannot tell
+by itself.
 
 Both cards fit any width on their own and keep their text at one size. A wider
 card spreads the diagram out rather than enlarging it, and a narrower one

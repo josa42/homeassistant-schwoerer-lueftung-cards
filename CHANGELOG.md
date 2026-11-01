@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **`reheater: false` for a unit without a Nachheizregister.** The Luftweg
+  card then leaves out the NE and labels T4 "nach WP". The register reads
+  inactive with or without one, so the card cannot tell by itself.
+- **Every value opens its detail view.** The VHR and NE on the Luftweg card and
+  the Zuluft temperature on the room card now open their entity too.
+
+### Changed
+
+- **T3 reads "vor WP".** The register list calls it "vor NE", which skips the
+  whole heat pump between them.
+
 ## 1.3.0 - 2026-11-01
 
 ### Added

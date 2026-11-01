@@ -45,15 +45,24 @@ const SLOTS = {
   after_preheater: { type: "temperature_t2_after_preheating_coil", tag: "T2", label: "nach VHR" },
   heat_exchanger: { type: "temperature_t6_in_heat_exchanger", tag: "T6", label: "nach WT" },
   condenser: { type: "temperature_t8_condenser", tag: "T8", label: "Kondensator" },
-  before_reheater: { type: "temperature_t3_before_reheater", tag: "T3", label: "vor NE" },
+  before_reheater: { type: "temperature_t3_before_reheater", tag: "T3", label: "vor WP" },
   after_reheater: { type: "temperature_t4_after_reheater", tag: "T4", label: "nach NE" },
   evaporator: { type: "temperature_t7_evaporator", tag: "T7", label: "Verdampfer" },
   exhaust: { type: "temperature_t5_exhaust_air", tag: "T5", label: "Abluft" },
   heat_pump: { type: "heat_pump_status", label: "Status Wärmepumpe" },
   bypass: { type: "bypass_state", label: "Bypass" },
+  // One register reports both preheater coils; the first one stands for the VHR.
+  preheater: { type: "preheater_1", domain: "binary_sensor", label: "Vorheizregister" },
+  reheater: { type: "reheater_state", domain: "binary_sensor", label: "Nachheizregister" },
   supply_flow: { type: "current_supply_air_flow", label: "Luftleistung Zuluft" },
   exhaust_flow: { type: "current_exhaust_air_flow", label: "Luftleistung Abluft" },
 };
+
+// The Nachheizregister is optional: the controller can drive one, internal or
+// external, but the approval does not require it, and its state register reads
+// "inactive" with or without one. `reheater: false` leaves it out, and then T4
+// is named after the heat pump's condenser, like T3 always is.
+const NO_REHEATER_LABELS = { after_reheater: "nach WP" };
 
 // Layout, after the WRG 134 BP-HK (docs/air-flow.md). Both streams run left to
 // right: outdoor air enters high and leaves low as supply, room air enters low
@@ -231,10 +240,10 @@ function airFlowLayout(baseTier, compact, k = 1) {
     nodes,
     streams,
     coils: [
-      tier.vhr && { x: tier.vhr, y: top, tag: "VHR", label: "Vorheizregister",
-        labelY: 47, labelClass: "component-title" },
-      tier.ne && { x: tier.ne, y: bot, tag: "NE", label: "Nachheizung",
-        labelY: bot - 28, labelClass: "label" },
+      tier.vhr && { slot: "preheater", x: tier.vhr, y: top, tag: "VHR",
+        label: "Vorheizregister", labelY: 47, labelClass: "component-title" },
+      tier.ne && { slot: "reheater", x: tier.ne, y: bot, tag: "NE",
+        label: "Nachheizung", labelY: bot - 28, labelClass: "label" },
     ].filter(Boolean),
     terminals: [
       { x: tier.outdoor, y: top, caption: "Außenluft", capped: false },
@@ -435,10 +444,12 @@ class WgtAirFlowCard extends HTMLElement {
     const w = Math.round(Math.min(this._width || full, full));
     const name = Object.keys(TIERS).find((n) => TIERS[n].width <= w) || "mini";
     const compact = Boolean(this._config.compact || TIERS[name].alwaysCompact);
-    const key = `${name}|${compact}|${w}`;
+    const reheater = this._config.reheater !== false;
+    const key = `${name}|${compact}|${reheater}|${w}`;
     if (key === this._layoutKey) return false;
     this._layoutKey = key;
-    this._layout = airFlowLayout(TIERS[name], compact, Math.max(1, w / TIERS[name].width));
+    const tier = reheater ? TIERS[name] : { ...TIERS[name], ne: null };
+    this._layout = airFlowLayout(tier, compact, Math.max(1, w / tier.width));
     this._built = false;
     return true;
   }
@@ -626,7 +637,7 @@ class WgtAirFlowCard extends HTMLElement {
           .wgt-af .sub { fill: var(--secondary-text-color); font-size: 13px; text-anchor: middle; }
           .wgt-af .sub.alert { fill: var(--info-color, #039be5); }
           .wgt-af .node { cursor: pointer; }
-          .wgt-af .node:hover .ring { stroke-width: 3; }
+          .wgt-af .node:hover .ring, .wgt-af .node:hover .coil { stroke-width: 3; }
           .wgt-af .hit { fill: none; pointer-events: all; rx: 6; }
           .wgt-af .node:hover .hit { fill: var(--secondary-text-color); fill-opacity: .1; }
         </style>
@@ -654,9 +665,11 @@ class WgtAirFlowCard extends HTMLElement {
                   : ""}`
             ).join("")}
             ${L.coils.map(
-              (c) => `<circle cx="${c.x}" cy="${c.y}" r="17" class="coil"/>
+              (c) => `<g class="node" data-slot="${c.slot}">
+                <circle cx="${c.x}" cy="${c.y}" r="17" class="coil"/>
                 <text x="${c.x}" y="${c.y + 4}" class="coil-tag">${c.tag}</text>
-                ${!L.coilLabels ? "" : `<text x="${c.x}" y="${c.labelY}" class="${c.labelClass}">${c.label}</text>`}`
+                ${!L.coilLabels ? "" : `<text x="${c.x}" y="${c.labelY}" class="${c.labelClass}">${c.label}</text>`}
+              </g>`
             ).join("")}
             <g class="node" data-slot="bypass">
               <rect x="${L.bypassText.x - 70}" y="${L.bypassText.y - 16}" width="140" height="24" class="hit"/>
@@ -669,13 +682,15 @@ class WgtAirFlowCard extends HTMLElement {
             ${Object.keys(L.nodes).map((slot) => {
               const { x, y } = L.nodes[slot];
               const meta = SLOTS[slot];
+              const label =
+                (this._config.reheater === false && NO_REHEATER_LABELS[slot]) || meta.label;
               return `<g class="node" data-slot="${slot}">
                 <rect x="${x - NODE_W / 2}" y="${y - NODE_H / 2}" width="${NODE_W}" height="${NODE_H}"
                       rx="13" class="ring"/>
                 <text x="${x}" y="${y - 7}" class="tag">${esc(meta.tag)}</text>
                 <text x="${x}" y="${y + 14}" class="val"></text>
-                ${meta.label && L.labels
-                  ? `<text x="${x}" y="${y + L.rowLabelDy}" class="label">${esc(meta.label)}</text>`
+                ${label && L.labels
+                  ? `<text x="${x}" y="${y + L.rowLabelDy}" class="label">${esc(label)}</text>`
                   : ""}
               </g>`;
             }).join("")}
@@ -731,7 +746,9 @@ class WgtAirFlowCard extends HTMLElement {
     }
 
     // these carry no temperature, but each is a real entity worth a history view
-    for (const slot of ["heat_pump", "bypass", "supply_flow", "exhaust_flow"]) {
+    for (const slot of [
+      "heat_pump", "bypass", "supply_flow", "exhaust_flow", "preheater", "reheater",
+    ]) {
       const g = this._nodeEls[slot];
       if (g) g.setAttribute("data-entity", ids[slot] || "");
     }
@@ -799,6 +816,7 @@ class WgtAirFlowCardEditor extends HTMLElement {
     return [
       { name: "device_id", selector: { device: { integration: "schwoerer_lueftung" } } },
       { name: "compact", selector: { boolean: {} } },
+      { name: "reheater", selector: { boolean: {} } },
     ];
   }
 
@@ -807,12 +825,18 @@ class WgtAirFlowCardEditor extends HTMLElement {
     if (!this._form) {
       this._form = document.createElement("ha-form");
       this._form.computeLabel = (s) =>
-        ({ device_id: "WGT-Gerät", compact: "Kompakt" })[s.name] || s.name;
+        ({
+          device_id: "WGT-Gerät",
+          compact: "Kompakt",
+          reheater: "Nachheizregister vorhanden",
+        })[s.name] || s.name;
       this._form.addEventListener("value-changed", (ev) => {
         ev.stopPropagation();
         const next = { ...ev.detail.value };
         if (!next.device_id) delete next.device_id;
         if (!next.compact) delete next.compact;
+        // on unless set to false, so only the exception is written
+        if (next.reheater !== false) delete next.reheater;
         this.dispatchEvent(
           new CustomEvent("config-changed", {
             detail: { config: next },
@@ -825,7 +849,7 @@ class WgtAirFlowCardEditor extends HTMLElement {
     }
     this._form.hass = this._hass;
     this._form.schema = this._schema();
-    this._form.data = this._config;
+    this._form.data = { reheater: true, ...this._config };
   }
 }
 
@@ -1103,10 +1127,14 @@ class WgtRoomCard extends HTMLElement {
               ? `<text x="${L.caps.left}" y="${L.titleY}" class="caption">ZULUFT</text>
                 <text x="${L.caps.right}" y="${L.titleY}" class="caption">ABLUFT</text>`
               : ""}
-            ${L.supplyText.label
-              ? `<text x="${L.supplyText.x}" y="${L.supplyText.label}" class="label">Zuluft</text>`
-              : ""}
-            <text x="${L.supplyText.x}" y="${L.supplyText.y}" class="sub" data-supply-air></text>
+            <g class="node" data-slot="supply_air">
+              <rect x="${L.supplyText.x - 36}" y="${(L.supplyText.label || L.supplyText.y) - 16}"
+                    width="72" height="${L.supplyText.label ? 42 : 24}" class="hit"/>
+              ${L.supplyText.label
+                ? `<text x="${L.supplyText.x}" y="${L.supplyText.label}" class="label">Zuluft</text>`
+                : ""}
+              <text x="${L.supplyText.x}" y="${L.supplyText.y}" class="sub" data-supply-air></text>
+            </g>
 
             <g class="node" data-slot="aux_active">
               <rect x="${coil.x - 56}" y="${coil.y + 20}" width="112" height="40" class="hit"/>

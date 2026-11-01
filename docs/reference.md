@@ -18,22 +18,33 @@ live on the main unit.
 ## WGT Luftweg
 
 The order of the components and where each sensor sits are documented, with
-sources and measurements, in [Air path](air-flow.md).
+sources and measurements, in [Air path](air-flow.md). Where the card's label
+differs from the manufacturer's parameter list, it names the position more
+precisely, and the table gives both.
 
 | Slot | `entity_type` | Shown as |
 |------|---------------|----------|
 | `outdoor` | `temperature_t10_outdoor` | T10, Außen |
 | `after_preheater` | `temperature_t2_after_preheating_coil` | T2, nach VHR |
-| `heat_exchanger` | `temperature_t6_in_heat_exchanger` | T6, nach WT |
+| `heat_exchanger` | `temperature_t6_in_heat_exchanger` | T6, nach WT (parameter list: im WT) |
 | `condenser` | `temperature_t8_condenser` | T8, Kondensator |
-| `before_reheater` | `temperature_t3_before_reheater` | T3, vor NE |
-| `after_reheater` | `temperature_t4_after_reheater` | T4, nach NE |
+| `before_reheater` | `temperature_t3_before_reheater` | T3, vor WP (parameter list: vor NE) |
+| `after_reheater` | `temperature_t4_after_reheater` | T4, nach NE, or nach WP without a Nachheizregister |
 | `evaporator` | `temperature_t7_evaporator` | T7, Verdampfer |
 | `exhaust` | `temperature_t5_exhaust_air` | T5, Abluft |
 | `heat_pump` | `heat_pump_status` | Wärmepumpe state |
 | `bypass` | `bypass_state` | Wärmetauscher bypass state |
+| `preheater` | `preheater_1` (binary_sensor) | VHR |
+| `reheater` | `reheater_state` (binary_sensor) | NE |
 | `supply_flow` | `current_supply_air_flow` | Zuluft percentage, dot speed |
 | `exhaust_flow` | `current_exhaust_air_flow` | Abluft percentage, dot speed |
+
+Every value opens its entity's detail view when clicked.
+
+The Nachheizregister is optional. The controller can drive one, internal or
+external, but the DIBt approval does not require it, and its state register
+reads inactive with or without one, so the card cannot tell. With
+`reheater: false` the card leaves the NE out and labels T4 "nach WP".
 
 T1 and T9 are absent on purpose. T1 only exists on units with a ground heat
 exchanger, and T9 is an undocumented register the integration disables by
