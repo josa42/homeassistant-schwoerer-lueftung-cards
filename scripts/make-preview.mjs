@@ -22,6 +22,22 @@ const geo = await import(
 
 const FPS = 12;
 
+// The colour SMIL's calcMode="linear" gives at a fraction of the path: a
+// straight RGB fade between the two keyframes around it.
+function fillAt({ keyTimes, values }, f) {
+  let i = keyTimes.findIndex((t, k) => k > 0 && f <= t);
+  if (i < 0) i = keyTimes.length - 1;
+  const span = keyTimes[i] - keyTimes[i - 1];
+  const s = span > 0 ? (f - keyTimes[i - 1]) / span : 1;
+  const [a, b] = [values[i - 1], values[i]].map(rgb);
+  return `rgb(${a.map((c, k) => Math.round(c + (b[k] - c) * s)).join(',')})`;
+}
+
+function rgb(color) {
+  if (color.startsWith('#')) return [1, 3, 5].map((i) => parseInt(color.slice(i, i + 2), 16));
+  return color.match(/\d+/g).map(Number);
+}
+
 // Walk a path into a dense polyline so a point can be found by arc length.
 // This is what "paced" means: distance advances at a constant rate with time.
 function sampler(d) {
@@ -157,10 +173,9 @@ const targets = [
     plans: geo.STREAMS.map((s) => ({
       path: sampler(s.d),
       len: s.len,
-      stops: s.stops,
       speed: AIR_FLOW._speed(s.name),
       count: Math.max(1, Math.round(s.len / geo.DOT_SPACING)),
-      colors: s.runs.map((r) => AIR_FLOW._dotColor(r.from)),
+      fill: AIR_FLOW._fillKeys(s),
     })),
     hp: { len: geo.HP_LINK.bottom - geo.HP_LINK.top, x: geo.HP_LINK.x, top: geo.HP_LINK.top },
   },
@@ -173,10 +188,9 @@ const targets = [
       {
         path: sampler(geo.ROOM_DUCT),
         len: geo.ROOM_DUCT_LEN,
-        stops: [geo.ROOM_DUCT_LEN],
         speed: ROOM._speed(),
         count: Math.max(1, Math.round(geo.ROOM_DUCT_LEN / geo.DOT_SPACING)),
-        colors: [ROOM._dotColor('supply_air')],
+        fill: { keyTimes: [0, 1], values: Array(2).fill(ROOM._dotColor('supply_air')) },
       },
     ],
     hp: null,
@@ -227,9 +241,7 @@ for (const t of targets) {
         const dist = i * spacing + time * p.speed;
         const [x, y] = p.path.at(dist);
         const along = ((dist % p.len) + p.len) % p.len;
-        let ci = p.stops.findIndex((stop) => along <= stop);
-        if (ci < 0) ci = p.colors.length - 1;
-        dots += `<circle cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" r="4" fill="${p.colors[ci]}"/>`;
+        dots += `<circle cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" r="4" fill="${fillAt(p.fill, along / p.len)}"/>`;
       }
     }
     let svg = template.replace('<g data-dots="" />', `<g>${dots}</g>`);

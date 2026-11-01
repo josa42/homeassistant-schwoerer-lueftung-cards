@@ -94,14 +94,17 @@ const NODES = {
 // 380,110 -> 620,320 and 380,320 -> 620,110, crossing dead centre at 500,215.
 //
 // `runs` splits each path only for COLOUR: a dot carries the reading of the last
-// sensor it passed, and the split points are where it passes one.
+// sensor it passed, and the split points are where it passes one. A run with a
+// `to` blends from one reading to the other instead. That is the heat
+// exchanger, which the diagonals enter at x 420 and leave at x 580.
 const STREAMS = [
   {
     name: "supply",
     runs: [
       { from: "outdoor", d: "M99,110 L339,110" },
-      { from: "after_preheater",
-        d: "L362,110 Q380,110 393.5,121.8 L606.5,308.2 Q620,320 638,320 L739,320" },
+      { from: "after_preheater", d: "L362,110 Q380,110 393.5,121.8 L420,145" },
+      { from: "after_preheater", to: "before_reheater", d: "L580,285" },
+      { from: "before_reheater", d: "L606.5,308.2 Q620,320 638,320 L739,320" },
       { from: "before_reheater", d: "L859,320" },
       { from: "condenser", d: "L1049,320" },
       { from: "after_reheater", d: "L1094,320" },
@@ -110,9 +113,9 @@ const STREAMS = [
   {
     name: "exhaust",
     runs: [
-      { from: "exhaust",
-        d: "M66,320 L362,320 Q380,320 393.5,308.2 L606.5,121.8 Q620,110 638,110 L739,110" },
-      { from: "heat_exchanger", d: "L859,110" },
+      { from: "exhaust", d: "M66,320 L362,320 Q380,320 393.5,308.2 L420,285" },
+      { from: "exhaust", to: "heat_exchanger", d: "L580,145" },
+      { from: "heat_exchanger", d: "L606.5,121.8 Q620,110 638,110 L859,110" },
       { from: "evaporator", d: "L1094,110" },
     ],
   },
@@ -190,11 +193,19 @@ for (const stream of STREAMS) {
     return pathLength(acc);
   });
   stream.len = stream.stops[stream.stops.length - 1];
-  // A colour is held from the previous stop to its own, as a fraction of the
-  // whole path, so the fill animation stays locked to the motion animation.
-  stream.keyTimes = [0, ...stream.stops.slice(0, -1).map((v) => v / stream.len)]
-    .map((f) => f.toFixed(4))
-    .join(";");
+}
+
+const DOT_GREY = "#9e9e9e";
+// How many steps a blending run is cut into. The temperature scale bends
+// through several hues, so each step is a point on the scale rather than one
+// straight fade between the two end colours.
+const BLEND_STEPS = 8;
+
+// Dot colour is quantised to 0.5 K. A raw reading flickers by 0.1 K every
+// poll, and rebuilding the dots for a colour shift nobody can see is churn.
+// SMIL cannot animate to a var(), so an unavailable reading needs a literal.
+function dotColor(v) {
+  return v === null ? DOT_GREY : tempColor(Math.round(v * 2) / 2);
 }
 
 const DOT_SPACING = 88;
@@ -345,12 +356,27 @@ class WgtAirFlowCard extends HTMLElement {
       </g>`;
   }
 
-  // Dot colour is quantised to 0.5 K. A raw reading flickers by 0.1 K every
-  // poll, and rebuilding the dots for a colour shift nobody can see is churn.
-  _dotColor(slot) {
-    const v = this._num(slot);
-    // SMIL cannot animate to a var(), so an unavailable reading needs a literal.
-    return v === null ? "#9e9e9e" : tempColor(Math.round(v * 2) / 2);
+  // The fill keyframes of one stream, as fractions of its path, so the fill
+  // animation stays locked to the motion animation. A plain run holds its
+  // colour from start to end; two keyframes at one time make the jump to the
+  // next run. A blending run steps along the scale between its two readings,
+  // and holds the first one if the second is unavailable.
+  _fillKeys(stream) {
+    const keyTimes = [];
+    const values = [];
+    stream.runs.forEach((r, i) => {
+      const start = i ? stream.stops[i - 1] / stream.len : 0;
+      const end = stream.stops[i] / stream.len;
+      const a = this._num(r.from);
+      const b = r.to ? this._num(r.to) : null;
+      const steps = a !== null && b !== null ? BLEND_STEPS : 1;
+      for (let k = 0; k <= steps; k++) {
+        const f = k / steps;
+        keyTimes.push(start + (end - start) * f);
+        values.push(dotColor(b === null ? a : a + (b - a) * f));
+      }
+    });
+    return { keyTimes, values };
   }
 
   // Carries dot phase across a rebuild: work out where dot 0 is right now as a
@@ -380,16 +406,17 @@ class WgtAirFlowCard extends HTMLElement {
     const dur = Number((stream.len / speed).toFixed(2));
     const count = Math.max(1, Math.round(stream.len / DOT_SPACING));
     const f0 = this._phaseOf(stream.name, dur, now);
-    const colors = stream.runs.map((r) => this._dotColor(r.from));
+    const { keyTimes, values } = this._fillKeys(stream);
+    const times = keyTimes.map((f) => f.toFixed(4)).join(";");
     let out = "";
     for (let i = 0; i < count; i++) {
       const begin = `-${(((f0 + i / count) % 1) * dur).toFixed(3)}s`;
-      out += `<circle r="4" fill="${colors[0]}" class="dot">
+      out += `<circle r="4" fill="${values[0]}" class="dot">
         <animateMotion dur="${dur}s" repeatCount="indefinite" calcMode="paced"
           begin="${begin}" path="${stream.d}"/>
         <animate attributeName="fill" dur="${dur}s" repeatCount="indefinite"
-          calcMode="discrete" begin="${begin}"
-          values="${colors.join(";")}" keyTimes="${stream.keyTimes}"/>
+          calcMode="linear" begin="${begin}"
+          values="${values.join(";")}" keyTimes="${times}"/>
       </circle>`;
     }
     return out;
@@ -590,7 +617,7 @@ class WgtAirFlowCard extends HTMLElement {
     // Re-issue dots only when their speed or quantised colours actually change;
     // _phaseOf then makes that swap invisible.
     const dotSig = STREAMS.map(
-      (s) => this._speed(s.name) + ":" + s.runs.map((r) => this._dotColor(r.from)).join(",")
+      (s) => this._speed(s.name) + ":" + this._fillKeys(s).values.join(",")
     ).join("|");
     if (dotSig !== this._dotSig) {
       this._dotSig = dotSig;
@@ -786,11 +813,8 @@ class WgtRoomCard extends HTMLElement {
     return Number.isFinite(v) ? v : null;
   }
 
-  // Quantised to 0.5 K, as on the air flow card: a raw reading flickers by
-  // 0.1 K every poll and rebuilding the dots for an invisible shift is churn.
   _dotColor(slot) {
-    const v = this._num(slot);
-    return v === null ? "#9e9e9e" : tempColor(Math.round(v * 2) / 2);
+    return dotColor(this._num(slot));
   }
 
   // Same curve as the air flow card, so dots move at one speed across both.

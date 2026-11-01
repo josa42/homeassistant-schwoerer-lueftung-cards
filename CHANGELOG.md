@@ -12,6 +12,12 @@
   T3's colour instead of T6's. [Air path](docs/air-flow.md) lists the sources
   and measurements.
 
+### Changed
+
+- **Dots change colour inside the heat exchanger.** On the Luftweg card the
+  supply dots fade from T2 to T3 and the exhaust dots from T5 to T6 while they
+  cross it, instead of switching colour at the next sensor.
+
 ## 1.1.1 - 2026-10-21
 
 ### Fixed
