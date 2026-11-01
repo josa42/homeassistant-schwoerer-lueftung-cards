@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WGT Luftweg Sandbox</title>
+<style>
+  :root {
+    --primary-text-color: #1f2937; --secondary-text-color: #6b7280;
+    --divider-color: #d4d4d8; --disabled-text-color: #bdbdbd;
+    --card-background-color: #fff; --info-color: #039be5; --warning-color: #ffa726;
+  }
+  body { font-family: -apple-system, Helvetica, sans-serif; background: #f3f4f6; margin: 0; padding: 16px; color: #1f2937; }
+  body.dark { --primary-text-color: #e5e7eb; --secondary-text-color: #9ca3af; --divider-color: #3f3f46;
+    --disabled-text-color: #6b7280; --card-background-color: #1f2937; background: #111827; color: #e5e7eb; }
+  ha-card { display: block; background: var(--card-background-color); border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.15); max-width: 1160px; margin: 0 auto; }
+  .controls { max-width: 1160px; margin: 0 auto 16px; display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; }
+  label { font-size: 14px; display: flex; gap: 6px; align-items: center; }
+  select, input { font: inherit; }
+  .temps { max-width: 1160px; margin: 16px auto 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }
+  .temps input { width: 64px; }
+</style>
+</head>
+<body>
+<div class="controls">
+  <label>Szenario
+    <select id="scenario">
+      <option value="heating">31.10. WP heizt</option>
+      <option value="off">31.10. WP aus</option>
+      <option value="cooling">Sommer, WP kühlt (geschätzt)</option>
+    </select>
+  </label>
+  <label>Wärmepumpe
+    <select id="hp"><option>heating</option><option>cooling</option><option>off</option><option>unavailable</option></select>
+  </label>
+  <label>Bypass
+    <select id="bypass"><option>closed</option><option>open</option><option>open_cooling</option><option>open_heating</option></select>
+  </label>
+  <label>Luftleistung <input id="flow" type="range" min="0" max="100" value="35"><span id="flowv">35 %</span></label>
+  <label><input id="dark" type="checkbox"> Dunkel</label>
+</div>
+<div id="mount"></div>
+<div class="temps" id="temps"></div>
+
+<script>
+  // The card wraps itself in <ha-card>; outside HA that is just a block.
+  customElements.define("ha-card", class extends HTMLElement {});
+</script>
+<script src="../schwoerer-lueftung-cards.js"></script>
+<script>
+  const SENSORS = [
+    ["temperature_t10_outdoor", "T10"],
+    ["temperature_t2_after_preheating_coil", "T2"],
+    ["temperature_t3_before_reheater", "T3"],
+    ["temperature_t8_condenser", "T8"],
+    ["temperature_t4_after_reheater", "T4"],
+    ["temperature_t5_exhaust_air", "T5"],
+    ["temperature_t6_in_heat_exchanger", "T6"],
+    ["temperature_t7_evaporator", "T7"],
+  ];
+  // The heating and off readings are real, from 2026-10-31 (docs/air-flow.md).
+  // The unit has not cooled since HA started recording, so that one is a guess.
+  const SCENARIOS = {
+    heating: { hp: "heating", bypass: "closed",
+      t: { T10: 6.7, T2: 9.0, T3: 19.6, T8: 48.1, T4: 46.5, T5: 21.7, T6: 10.7, T7: -0.6 } },
+    off: { hp: "off", bypass: "closed",
+      t: { T10: 6.7, T2: 10.0, T3: 19.3, T8: 18.1, T4: 18.0, T5: 21.5, T6: 12.0, T7: 14.2 } },
+    cooling: { hp: "cooling", bypass: "closed",
+      t: { T10: 30.0, T2: 30.0, T3: 26.5, T8: 12.0, T4: 16.0, T5: 24.0, T6: 27.5, T7: 40.0 } },
+  };
+
+  const state = { hp: "heating", bypass: "closed", flow: 35, t: {} };
+  const card = document.createElement("wgt-air-flow-card");
+  card.setConfig({ type: "custom:wgt-air-flow-card", device_id: "wgt" });
+  document.getElementById("mount").append(card);
+
+  const temps = document.getElementById("temps");
+  for (const [, tag] of SENSORS) {
+    const l = document.createElement("label");
+    l.innerHTML = `${tag} <input type="number" step="0.1" data-tag="${tag}"> °C`;
+    temps.append(l);
+  }
+
+  function hass() {
+    const states = {};
+    const entities = {};
+    const add = (id, type, value) => {
+      states[id] = { state: String(value), attributes: { entity_type: type } };
+      entities[id] = { device_id: "wgt" };
+    };
+    for (const [type, tag] of SENSORS) add(`sensor.wgt_${tag.toLowerCase()}`, type, state.t[tag]);
+    add("sensor.wgt_heat_pump", "heat_pump_status", state.hp);
+    add("sensor.wgt_bypass", "bypass_state", state.bypass);
+    add("sensor.wgt_supply_flow", "current_supply_air_flow", state.flow);
+    add("sensor.wgt_exhaust_flow", "current_exhaust_air_flow", state.flow);
+    return { states, entities };
+  }
+
+  function sync() {
+    document.getElementById("hp").value = state.hp;
+    document.getElementById("bypass").value = state.bypass;
+    for (const i of temps.querySelectorAll("input")) i.value = state.t[i.dataset.tag];
+    card.hass = hass();
+  }
+
+  function loadScenario(name) {
+    const s = SCENARIOS[name];
+    state.hp = s.hp; state.bypass = s.bypass; state.t = { ...s.t };
+    sync();
+  }
+
+  document.getElementById("scenario").onchange = (e) => loadScenario(e.target.value);
+  document.getElementById("hp").onchange = (e) => { state.hp = e.target.value; sync(); };
+  document.getElementById("bypass").onchange = (e) => { state.bypass = e.target.value; sync(); };
+  document.getElementById("flow").oninput = (e) => {
+    state.flow = Number(e.target.value);
+    document.getElementById("flowv").textContent = `${state.flow} %`;
+    sync();
+  };
+  document.getElementById("dark").onchange = (e) => document.body.classList.toggle("dark", e.target.checked);
+  temps.oninput = (e) => {
+    const v = Number.parseFloat(e.target.value);
+    if (Number.isFinite(v)) { state.t[e.target.dataset.tag] = v; card.hass = hass(); }
+  };
+  addEventListener("hass-more-info", (e) => console.log("more-info", e.detail.entityId));
+
+  loadScenario("heating");
+</script>
+</body>
+</html>

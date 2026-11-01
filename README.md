@@ -81,6 +81,17 @@ by hand and installing without HACS.
 
 <br><br>
 
+## Development
+
+`npm run sandbox` serves a test page at <http://127.0.0.1:8765/sandbox/>. It
+loads the Luftweg card straight from the working tree with mocked Home
+Assistant data, so a reload shows every change. It has switches for the heat
+pump, the bypass, the fan rate and each temperature.
+
+`npm run preview` renders the GIFs in `assets/`.
+
+<br><br>
+
 ## License
 
 [MIT](LICENSE)
