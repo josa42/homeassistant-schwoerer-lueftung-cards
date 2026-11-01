@@ -19,6 +19,7 @@
   select, input { font: inherit; }
   .temps { max-width: 1160px; margin: 16px auto 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }
   .temps input { width: 64px; }
+  #mount { margin: 0 auto; }
 </style>
 </head>
 <body>
@@ -37,6 +38,7 @@
     <select id="bypass"><option>closed</option><option>open</option><option>open_cooling</option><option>open_heating</option></select>
   </label>
   <label>Luftleistung <input id="flow" type="range" min="0" max="100" value="35"><span id="flowv">35 %</span></label>
+  <label>Breite <input id="width" type="range" min="300" max="1160" step="10" value="1160"><span id="widthv">1160 px</span></label>
   <label><input id="compact" type="checkbox"> Kompakt</label>
   <label><input id="dark" type="checkbox"> Dunkel</label>
 </div>
@@ -72,8 +74,16 @@
 
   const state = { hp: "heating", bypass: "closed", flow: 35, t: {} };
   const card = document.createElement("wgt-air-flow-card");
-  // ?compact opens the compact layout, for a screenshot without a click
-  const compact = new URLSearchParams(location.search).has("compact");
+  // Width, Kompakt and Dunkel live in the URL (?width=360&compact&dark), so a
+  // reload keeps them and a screenshot needs no click or a window that small.
+  const params = new URLSearchParams(location.search);
+  function saveParam(name, value) {
+    if (value === null) params.delete(name);
+    else params.set(name, value);
+    const query = params.toString().replace(/=(?=&|$)/g, "");
+    history.replaceState(null, "", query ? `?${query}` : location.pathname);
+  }
+  const compact = params.has("compact");
   document.getElementById("compact").checked = compact;
   card.setConfig({ type: "custom:wgt-air-flow-card", device_id: "wgt", compact });
   document.getElementById("mount").append(card);
@@ -121,11 +131,32 @@
     document.getElementById("flowv").textContent = `${state.flow} %`;
     sync();
   };
+  // The card picks its layout from its own width, so this walks it through
+  // every tier, down to a phone.
+  function setWidth(px) {
+    document.getElementById("width").value = px;
+    document.getElementById("widthv").textContent = `${px} px`;
+    document.getElementById("mount").style.maxWidth = `${px}px`;
+  }
+  document.getElementById("width").oninput = (e) => {
+    setWidth(Number(e.target.value));
+    saveParam("width", e.target.value === e.target.max ? null : e.target.value);
+  };
+  if (params.has("width")) setWidth(Number(params.get("width")));
   document.getElementById("compact").onchange = (e) => {
     card.setConfig({ type: "custom:wgt-air-flow-card", device_id: "wgt", compact: e.target.checked });
     card.hass = hass();
+    saveParam("compact", e.target.checked ? "" : null);
   };
-  document.getElementById("dark").onchange = (e) => document.body.classList.toggle("dark", e.target.checked);
+  function setDark(on) {
+    document.getElementById("dark").checked = on;
+    document.body.classList.toggle("dark", on);
+  }
+  document.getElementById("dark").onchange = (e) => {
+    setDark(e.target.checked);
+    saveParam("dark", e.target.checked ? "" : null);
+  };
+  setDark(params.has("dark"));
   temps.oninput = (e) => {
     const v = Number.parseFloat(e.target.value);
     if (Number.isFinite(v)) { state.t[e.target.dataset.tag] = v; card.hass = hass(); }
