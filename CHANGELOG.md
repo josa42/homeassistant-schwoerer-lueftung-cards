@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **The Luftweg card draws the components in the order the air passes them.**
+  The heat pump now sits behind the heat exchanger on both streams, as in the
+  WRG 134 BP-HK: T3 comes before the condenser, and T6 sits on the exhaust
+  side between the heat exchanger and the evaporator. Außenluft and Abluft
+  both enter on the left. The supply dots behind the heat exchanger now take
+  T3's colour instead of T6's. [Air path](docs/air-flow.md) lists the sources
+  and measurements.
+
 ## 1.1.1 - 2026-10-21
 
 ### Fixed

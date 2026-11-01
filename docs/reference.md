@@ -17,6 +17,9 @@ live on the main unit.
 
 ## WGT Luftweg
 
+The order of the components and where each sensor sits are documented, with
+sources and measurements, in [Air path](air-flow.md).
+
 | Slot | `entity_type` | Shown as |
 |------|---------------|----------|
 | `outdoor` | `temperature_t10_outdoor` | T10, Außen |

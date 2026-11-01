@@ -76,6 +76,7 @@ by hand and installing without HACS.
 ## Documentation
 
 - [Reference](docs/reference.md): which entity fills which position, and troubleshooting
+- [Air path](docs/air-flow.md): where each sensor sits in the unit, with sources
 - [Changelog](CHANGELOG.md)
 
 <br><br>

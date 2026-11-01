@@ -55,11 +55,12 @@ const SLOTS = {
   exhaust_flow: { type: "current_exhaust_air_flow", label: "Luftleistung Abluft" },
 };
 
-// Layout. Outdoor air enters low on the left and leaves high on the right as
-// supply; room air enters low on the right and leaves high on the left as
-// exhaust. Each stream is one horizontal run, a single turn, one straight
-// diagonal through the heat exchanger where the two cross, a single turn back,
-// and a second horizontal run. Two corners per stream, no more.
+// Layout, after the WRG 134 BP-HK (docs/air-flow.md). Both streams run left to
+// right: outdoor air enters high and leaves low as supply, room air enters low
+// and leaves high as exhaust. Each stream is one horizontal run, a single turn,
+// one straight diagonal through the heat exchanger where the two cross, a
+// single turn back, and a second horizontal run through the heat pump. Two
+// corners per stream, no more.
 const NODE_W = 78;
 const NODE_H = 54;
 const TOP_Y = 110;
@@ -70,18 +71,18 @@ const HOUSING = { x: 140, y: 30, w: 880, h: 360 };
 // Both enclosures share a top and a height so they read as one row of gear.
 const COMPONENTS = [
   { x: 420, y: 56, w: 160, h: 320, title: "Wärmetauscher", state: "bypass" },
-  { x: 647, y: 56, w: 106, h: 320, title: "Wärmepumpe", state: "heat_pump" },
+  { x: 767, y: 56, w: 106, h: 320, title: "Wärmepumpe", state: "heat_pump" },
 ];
 
 const NODES = {
-  outdoor: { x: 60, y: BOT_Y },
-  after_preheater: { x: 300, y: BOT_Y },
-  heat_exchanger: { x: 500, y: 215 },
-  condenser: { x: 700, y: TOP_Y },
-  before_reheater: { x: 808, y: TOP_Y },
-  after_reheater: { x: 964, y: TOP_Y },
-  evaporator: { x: 700, y: BOT_Y },
-  exhaust: { x: 964, y: BOT_Y },
+  outdoor: { x: 60, y: TOP_Y },
+  after_preheater: { x: 300, y: TOP_Y },
+  heat_exchanger: { x: 700, y: TOP_Y },
+  evaporator: { x: 820, y: TOP_Y },
+  exhaust: { x: 300, y: BOT_Y },
+  before_reheater: { x: 700, y: BOT_Y },
+  condenser: { x: 820, y: BOT_Y },
+  after_reheater: { x: 1010, y: BOT_Y },
 };
 
 // Each stream is ONE continuous path, so its dots keep a single phase from end
@@ -90,7 +91,7 @@ const NODES = {
 // simply hidden while it crosses one.
 //
 // The turns are quadratics whose control point IS the corner. The diagonals run
-// 380,320 -> 620,110 and 620,320 -> 380,110, crossing dead centre at 500,215.
+// 380,110 -> 620,320 and 380,320 -> 620,110, crossing dead centre at 500,215.
 //
 // `runs` splits each path only for COLOUR: a dot carries the reading of the last
 // sensor it passed, and the split points are where it passes one.
@@ -98,39 +99,40 @@ const STREAMS = [
   {
     name: "supply",
     runs: [
-      { from: "outdoor", d: "M99,320 L339,320" },
-      { from: "after_preheater", d: "L362,320 Q380,320 393.5,308.2 L539,181" },
-      { from: "heat_exchanger", d: "L606.5,121.8 Q620,110 638,110 L739,110" },
-      { from: "condenser", d: "L847,110" },
-      { from: "before_reheater", d: "L1003,110" },
-      { from: "after_reheater", d: "L1094,110" },
+      { from: "outdoor", d: "M99,110 L339,110" },
+      { from: "after_preheater",
+        d: "L362,110 Q380,110 393.5,121.8 L606.5,308.2 Q620,320 638,320 L739,320" },
+      { from: "before_reheater", d: "L859,320" },
+      { from: "condenser", d: "L1049,320" },
+      { from: "after_reheater", d: "L1094,320" },
     ],
   },
   {
     name: "exhaust",
     runs: [
-      { from: "exhaust", d: "M1094,320 L661,320" },
-      { from: "evaporator", d: "L638,320 Q620,320 606.5,308.2 L461,181" },
-      { from: "heat_exchanger", d: "L393.5,121.8 Q380,110 362,110 L66,110" },
+      { from: "exhaust",
+        d: "M66,320 L362,320 Q380,320 393.5,308.2 L606.5,121.8 Q620,110 638,110 L739,110" },
+      { from: "heat_exchanger", d: "L859,110" },
+      { from: "evaporator", d: "L1094,110" },
     ],
   },
 ];
 
 const COILS = [
-  { x: 200, y: BOT_Y, tag: "VHR", label: "Vorheizregister",
-    labelY: BOT_Y + ROW_LABEL_DY + 16, labelClass: "label" },
-  { x: 886, y: TOP_Y, tag: "NE", label: "Nachheizregister",
+  { x: 200, y: TOP_Y, tag: "VHR", label: "Vorheizregister",
     labelY: 47, labelClass: "component-title" },
+  { x: 915, y: BOT_Y, tag: "NE", label: "Nachheizregister",
+    labelY: BOT_Y - 28, labelClass: "label" },
 ];
 
 const TERMINALS = [
-  { x: 60, y: TOP_Y, caption: "Fortluft", capped: true },
-  { x: 60, y: BOT_Y, caption: "Außenluft", capped: false },
-  { x: 1100, y: TOP_Y, caption: "Zuluft", capped: true, flow: "supply_flow" },
-  { x: 1100, y: BOT_Y, caption: "Abluft", capped: true, flow: "exhaust_flow" },
+  { x: 60, y: TOP_Y, caption: "Außenluft", capped: false },
+  { x: 60, y: BOT_Y, caption: "Abluft", capped: true, flow: "exhaust_flow" },
+  { x: 1100, y: TOP_Y, caption: "Fortluft", capped: true },
+  { x: 1100, y: BOT_Y, caption: "Zuluft", capped: true, flow: "supply_flow" },
 ];
 
-const HP_LINK = { x: 700, top: 137, bottom: 293 };
+const HP_LINK = { x: 820, top: 137, bottom: 293 };
 
 // Length of an M/L/Q/C path, so a dot's duration can be derived from the
 // distance it covers and every duct runs at one constant speed.
@@ -399,12 +401,12 @@ class WgtAirFlowCard extends HTMLElement {
       delete this._phase.hp;
       return "";
     }
-    // Heat leaves the evaporator for the condenser when heating, the other way
-    // when cooling, so the dots follow the actual transfer.
+    // Heat leaves the evaporator (top) for the condenser (bottom) when heating,
+    // the other way when cooling, so the dots follow the actual transfer.
     const d =
       hpState === "cooling"
-        ? `M${HP_LINK.x},${HP_LINK.top} L${HP_LINK.x},${HP_LINK.bottom}`
-        : `M${HP_LINK.x},${HP_LINK.bottom} L${HP_LINK.x},${HP_LINK.top}`;
+        ? `M${HP_LINK.x},${HP_LINK.bottom} L${HP_LINK.x},${HP_LINK.top}`
+        : `M${HP_LINK.x},${HP_LINK.top} L${HP_LINK.x},${HP_LINK.bottom}`;
     const dur = Number(((HP_LINK.bottom - HP_LINK.top) / 60).toFixed(2));
     const f0 = this._phaseOf("hp", dur, now);
     const color = HEAT_PUMP_COLORS[hpState] || "#9e9e9e";

@@ -111,19 +111,20 @@ const css = src
   .replace(/var\(--info-color, #039be5\)/g, '#039be5')
   .replace(/var\(--warning-color, #ffa726\)/g, '#ffa726');
 
-// A winter state, so the colour scale and the heat pump's transfer direction
-// are both visible. Fan level 3 throughout.
+// A real reading with the heat pump heating (2026-10-31, docs/air-flow.md), so
+// the colour scale and the heat pump's transfer direction are both visible.
+// Fan level 3 throughout.
 const AIR_FLOW = mount(
   'wgt-air-flow-card',
   makeHass([
-    ['temperature_t10_outdoor', '-2.0'],
-    ['temperature_t2_after_preheating_coil', '1.5'],
-    ['temperature_t6_in_heat_exchanger', '12.4'],
-    ['temperature_t8_condenser', '21.0'],
-    ['temperature_t3_before_reheater', '20.4'],
-    ['temperature_t4_after_reheater', '22.0'],
-    ['temperature_t7_evaporator', '4.8'],
-    ['temperature_t5_exhaust_air', '22.6'],
+    ['temperature_t10_outdoor', '6.7'],
+    ['temperature_t2_after_preheating_coil', '9.0'],
+    ['temperature_t6_in_heat_exchanger', '10.7'],
+    ['temperature_t8_condenser', '48.1'],
+    ['temperature_t3_before_reheater', '19.6'],
+    ['temperature_t4_after_reheater', '46.5'],
+    ['temperature_t7_evaporator', '-0.6'],
+    ['temperature_t5_exhaust_air', '21.7'],
     ['heat_pump_status', 'heating'],
     ['bypass_state', 'closed'],
     ['current_supply_air_flow', '50'],
@@ -161,7 +162,7 @@ const targets = [
       count: Math.max(1, Math.round(s.len / geo.DOT_SPACING)),
       colors: s.runs.map((r) => AIR_FLOW._dotColor(r.from)),
     })),
-    hp: { len: geo.HP_LINK.bottom - geo.HP_LINK.top, x: geo.HP_LINK.x, bottom: geo.HP_LINK.bottom },
+    hp: { len: geo.HP_LINK.bottom - geo.HP_LINK.top, x: geo.HP_LINK.x, top: geo.HP_LINK.top },
   },
   {
     name: 'wgt-room-card',
@@ -233,11 +234,11 @@ for (const t of targets) {
     }
     let svg = template.replace('<g data-dots="" />', `<g>${dots}</g>`);
     if (t.hp) {
-      // heating moves heat up, from the evaporator to the condenser
+      // heating moves heat down, from the evaporator to the condenser
       let hp = '';
       for (let i = 0; i < 2; i++) {
         const d = (i * (t.hp.len / 2) + time * 60) % t.hp.len;
-        hp += `<circle cx="${t.hp.x}" cy="${(t.hp.bottom - d).toFixed(2)}" r="4" fill="#ff9800"/>`;
+        hp += `<circle cx="${t.hp.x}" cy="${(t.hp.top + d).toFixed(2)}" r="4" fill="#ff9800"/>`;
       }
       svg = svg.replace('<g data-hp-dots="" />', `<g>${hp}</g>`);
     }
