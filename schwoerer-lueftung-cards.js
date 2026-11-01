@@ -43,7 +43,7 @@ function tempColor(v) {
 const SLOTS = {
   outdoor: { type: "temperature_t10_outdoor", tag: "T10", label: "Außen" },
   after_preheater: { type: "temperature_t2_after_preheating_coil", tag: "T2", label: "nach VHR" },
-  heat_exchanger: { type: "temperature_t6_in_heat_exchanger", tag: "T6", label: "im WT" },
+  heat_exchanger: { type: "temperature_t6_in_heat_exchanger", tag: "T6", label: "nach WT" },
   condenser: { type: "temperature_t8_condenser", tag: "T8", label: "Kondensator" },
   before_reheater: { type: "temperature_t3_before_reheater", tag: "T3", label: "vor NE" },
   after_reheater: { type: "temperature_t4_after_reheater", tag: "T4", label: "nach NE" },

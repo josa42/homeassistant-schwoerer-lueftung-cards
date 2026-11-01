@@ -24,7 +24,7 @@ sources and measurements, in [Air path](air-flow.md).
 |------|---------------|----------|
 | `outdoor` | `temperature_t10_outdoor` | T10, Außen |
 | `after_preheater` | `temperature_t2_after_preheating_coil` | T2, nach VHR |
-| `heat_exchanger` | `temperature_t6_in_heat_exchanger` | T6, im WT |
+| `heat_exchanger` | `temperature_t6_in_heat_exchanger` | T6, nach WT |
 | `condenser` | `temperature_t8_condenser` | T8, Kondensator |
 | `before_reheater` | `temperature_t3_before_reheater` | T3, vor NE |
 | `after_reheater` | `temperature_t4_after_reheater` | T4, nach NE |

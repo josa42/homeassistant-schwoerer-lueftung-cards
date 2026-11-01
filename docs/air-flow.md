@@ -79,7 +79,9 @@ Heat pump off at 12:21:
 | T7 Verdampfer | 1.7 | 11.6 | +10 K |
 
 T3 therefore sits between the heat exchanger and the condenser, and T6
-between the heat exchanger and the evaporator.
+between the heat exchanger and the evaporator. The register list calls T6
+"im WT", but it measures the exhaust air leaving the heat exchanger, so the
+card labels it "nach WT".
 
 The heat exchanger's temperature ratio confirms both. At 10:40, with the heat
 pump off, T2 read 10.0 and T5 21.5:
