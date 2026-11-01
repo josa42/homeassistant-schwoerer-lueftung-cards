@@ -164,7 +164,7 @@ const ROOM = mount(
   ])
 );
 
-const hpLink = geo.LAYOUTS.full.hpLink;
+const hpLink = geo.LAYOUTS.full.regular.hpLink;
 
 const targets = [
   {
@@ -172,7 +172,7 @@ const targets = [
     card: AIR_FLOW,
     width: 1000,
     scope: 'wgt-af',
-    plans: geo.LAYOUTS.full.streams.map((s) => ({
+    plans: geo.LAYOUTS.full.regular.streams.map((s) => ({
       path: sampler(s.d),
       len: s.len,
       speed: AIR_FLOW._speed(s.name),

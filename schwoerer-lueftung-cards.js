@@ -63,58 +63,104 @@ const SLOTS = {
 // corners per stream, no more.
 //
 // The compact layout is the same diagram with the two rows pulled together. It
-// keeps every sensor and the dots, and drops the row labels and the titles.
+// keeps the dots, and drops the row labels and the titles.
 const NODE_W = 78;
 const NODE_H = 54;
 
-function airFlowLayout(compact) {
+// The card picks the widest tier it can show with text at MIN_SCALE or more of
+// its size. Each tier squeezes the columns and leaves out what no longer fits:
+// first the coil labels, then T2 and the coil temperatures T7 and T8, and on a
+// phone everything but the air entering and leaving the unit. A null column is
+// not drawn. The x of a column is the centre of its node.
+const MIN_SCALE = 0.75;
+const TIERS = {
+  full: {
+    width: 1160, housing: [140, 1020], outdoor: 60, vhr: 210, preheat: 290, exhaust: 290,
+    wt: [370, 580, 30], hx: 660, hp: 780, hpNodes: true, ne: 865, supply: 950, end: 1100,
+    titles: true, labels: true, coilLabels: true,
+  },
+  narrow: {
+    width: 856, housing: [106, 760], outdoor: 54, vhr: 132, preheat: 196, exhaust: 196,
+    wt: [255, 405, 20], hx: 467, hp: 570, hpNodes: true, ne: 642, supply: 705, end: 808,
+    titles: true, labels: true, coilLabels: false,
+  },
+  small: {
+    width: 748, housing: [106, 654], outdoor: 54, vhr: 132, preheat: null, exhaust: 170,
+    wt: [232, 352, 16], hx: 414, hp: 486, hpNodes: false, ne: 534, supply: 600, end: 702,
+    titles: true, labels: true, coilLabels: false,
+  },
+  // Abluft and Zuluft are nodes standing in for their terminals here. With so
+  // little left to show the full height is only empty space, so it is always
+  // compact.
+  mini: {
+    width: 400, housing: [106, 306], outdoor: 54, vhr: null, preheat: null, exhaust: 54,
+    wt: [130, 250, 16], hx: null, hp: 278, hpNodes: false, ne: null, supply: 350, end: 350,
+    titles: false, labels: false, coilLabels: false, alwaysCompact: true,
+  },
+};
+
+function airFlowLayout(tier, compact) {
   const top = compact ? 52 : 110;
   const bot = compact ? 172 : 320;
   const rise = bot - top;
   const round = (n) => Number(n.toFixed(1));
+  const edge = (x) => x + NODE_W / 2;
+  const [c1, c2, inset] = tier.wt;
 
   // Each stream is ONE continuous path, so its dots keep a single phase from
   // end to end: even spacing, nothing appearing or vanishing at a join. The
   // path runs straight behind the node boxes and coils, which are drawn on top,
   // so a dot is simply hidden while it crosses one.
   //
-  // The diagonals run from x 370 to x 580 and cross dead centre at x 475; in
-  // the full layout that is 45°. The turns are quadratics whose control point
-  // IS the corner, with 18 px of straight on either side.
+  // The diagonals run from corner c1 to corner c2 and cross dead centre between
+  // them; in the full tier that is 45°. The turns are quadratics whose control
+  // point IS the corner, with 18 px of straight on either side.
   //
   // `runs` splits each path only for COLOUR: a dot carries the reading of the
   // last sensor it passed, and the split points are where it passes one. A run
   // with a `to` blends from one reading to the other instead. That is the heat
-  // exchanger, which the diagonals enter at x 400 and leave at x 550.
-  const span = 210;
+  // exchanger, which the diagonals enter and leave `inset` inside the corners.
+  // Where a sensor is not drawn, the dot changes colour at the component it
+  // measures: the VHR coil, or the heat pump's link for T7 and T8.
+  const span = c2 - c1;
   const ux = (18 * span) / Math.hypot(span, rise);
   const uy = (18 * rise) / Math.hypot(span, rise);
-  const near = round(top + (30 / span) * rise);
-  const far = round(top + (180 / span) * rise);
+  const near = round(top + (inset / span) * rise);
+  const far = round(top + ((span - inset) / span) * rise);
+  const afterVhr = tier.preheat ? edge(tier.preheat) : tier.vhr && tier.vhr + 17;
+  const afterHp = tier.hpNodes ? edge(tier.hp) : tier.hp;
   const streams = [
     {
       name: "supply",
       runs: [
-        { from: "outdoor", d: `M99,${top} L329,${top}` },
-        { from: "after_preheater",
-          d: `L352,${top} Q370,${top} ${round(370 + ux)},${round(top + uy)} L400,${near}` },
-        { from: "after_preheater", to: "before_reheater", d: `L550,${far}` },
+        ...(afterVhr
+          ? [{ from: "outdoor", d: `M${edge(tier.outdoor)},${top} L${afterVhr},${top}` }]
+          : []),
+        { from: afterVhr ? "after_preheater" : "outdoor",
+          d: `${afterVhr ? "" : `M${edge(tier.outdoor)},${top} `}L${c1 - 18},${top} ` +
+            `Q${c1},${top} ${round(c1 + ux)},${round(top + uy)} L${c1 + inset},${near}` },
+        { from: afterVhr ? "after_preheater" : "outdoor", to: "before_reheater",
+          d: `L${c2 - inset},${far}` },
         { from: "before_reheater",
-          d: `L${round(580 - ux)},${round(bot - uy)} Q580,${bot} 598,${bot} L699,${bot}` },
-        { from: "before_reheater", d: `L819,${bot}` },
-        { from: "condenser", d: `L989,${bot}` },
-        { from: "after_reheater", d: `L1094,${bot}` },
+          d: `L${round(c2 - ux)},${round(bot - uy)} Q${c2},${bot} ${c2 + 18},${bot} L${afterHp},${bot}` },
+        // ends under the Zuluft node where that node is the terminal
+        { from: "condenser",
+          d: `L${tier.end > tier.supply ? edge(tier.supply) : tier.supply},${bot}` },
+        ...(tier.end > tier.supply
+          ? [{ from: "after_reheater", d: `L${tier.end - 6},${bot}` }]
+          : []),
       ],
     },
     {
       name: "exhaust",
       runs: [
         { from: "exhaust",
-          d: `M66,${bot} L352,${bot} Q370,${bot} ${round(370 + ux)},${round(bot - uy)} L400,${round(top + bot - near)}` },
-        { from: "exhaust", to: "heat_exchanger", d: `L550,${round(top + bot - far)}` },
+          d: `M${tier.outdoor + 6},${bot} L${c1 - 18},${bot} ` +
+            `Q${c1},${bot} ${round(c1 + ux)},${round(bot - uy)} L${c1 + inset},${round(top + bot - near)}` },
+        { from: "exhaust", to: "heat_exchanger", d: `L${c2 - inset},${round(top + bot - far)}` },
         { from: "heat_exchanger",
-          d: `L${round(580 - ux)},${round(top + uy)} Q580,${top} 598,${top} L819,${top}` },
-        { from: "evaporator", d: `L1094,${top}` },
+          d: `L${round(c2 - ux)},${round(top + uy)} Q${c2},${top} ${c2 + 18},${top} L${afterHp},${top}` },
+        { from: "evaporator", d: `L${tier.end - 6},${top}` },
       ],
     },
   ];
@@ -128,49 +174,65 @@ function airFlowLayout(compact) {
     stream.len = stream.stops[stream.stops.length - 1];
   }
 
+  const nodes = {
+    outdoor: { x: tier.outdoor, y: top },
+    after_preheater: tier.preheat && { x: tier.preheat, y: top },
+    heat_exchanger: tier.hx && { x: tier.hx, y: top },
+    evaporator: tier.hpNodes && { x: tier.hp, y: top },
+    exhaust: { x: tier.exhaust, y: bot },
+    before_reheater: tier.hx && { x: tier.hx, y: bot },
+    condenser: tier.hpNodes && { x: tier.hp, y: bot },
+    after_reheater: { x: tier.supply, y: bot },
+  };
+  for (const slot of Object.keys(nodes)) if (!nodes[slot]) delete nodes[slot];
+
   // Both enclosures share a top and a height so they read as one row of gear.
   const component = compact ? { y: 16, h: 190 } : { y: 56, h: 320 };
+  const hpW = tier.hpNodes ? 106 : 40;
+  const [left, right] = tier.housing;
 
   return {
     compact,
+    width: tier.width,
     height: compact ? 222 : 415,
-    housing: compact ? { x: 140, y: 8, w: 880, h: 206 } : { x: 140, y: 30, w: 880, h: 360 },
+    housing: compact
+      ? { x: left, y: 8, w: right - left, h: 206 }
+      : { x: left, y: 30, w: right - left, h: 360 },
+    titles: tier.titles && !compact,
+    labels: tier.labels && !compact,
+    coilLabels: tier.coilLabels && !compact,
     components: [
-      { x: 400, w: 150, ...component, title: "Wärmetauscher" },
-      { x: 727, w: 106, ...component, title: "Wärmepumpe" },
+      { x: c1 + inset, w: span - 2 * inset, ...component, title: "Wärmetauscher" },
+      { x: tier.hp - hpW / 2, w: hpW, ...component, title: "Wärmepumpe" },
     ],
-    nodes: {
-      outdoor: { x: 60, y: top },
-      after_preheater: { x: 290, y: top },
-      heat_exchanger: { x: 660, y: top },
-      evaporator: { x: 780, y: top },
-      exhaust: { x: 290, y: bot },
-      before_reheater: { x: 660, y: bot },
-      condenser: { x: 780, y: bot },
-      after_reheater: { x: 950, y: bot },
-    },
+    nodes,
     streams,
     coils: [
-      { x: 210, y: top, tag: "VHR", label: "Vorheizregister",
+      tier.vhr && { x: tier.vhr, y: top, tag: "VHR", label: "Vorheizregister",
         labelY: 47, labelClass: "component-title" },
-      { x: 865, y: bot, tag: "NE", label: "Nachheizung",
+      tier.ne && { x: tier.ne, y: bot, tag: "NE", label: "Nachheizung",
         labelY: bot - 28, labelClass: "label" },
-    ],
+    ].filter(Boolean),
     terminals: [
-      { x: 60, y: top, caption: "Außenluft", capped: false },
-      { x: 60, y: bot, caption: "Abluft", capped: true, flow: "exhaust_flow" },
-      { x: 1100, y: top, caption: "Fortluft", capped: true },
-      { x: 1100, y: bot, caption: "Zuluft", capped: true, flow: "supply_flow" },
+      { x: tier.outdoor, y: top, caption: "Außenluft", capped: false },
+      { x: tier.outdoor, y: bot, caption: "Abluft", capped: true, flow: "exhaust_flow" },
+      { x: tier.end, y: top, caption: "Fortluft", capped: true },
+      { x: tier.end, y: bot, caption: "Zuluft", capped: true, flow: "supply_flow" },
     ],
     // Below a node in the full layout. In the compact one only the flow rate
     // under Abluft and Zuluft is left, and those terminals have no node.
-    rowLabelDy: compact ? 32 : 46,
-    hpLink: { x: 780, top: top + NODE_H / 2, bottom: bot - NODE_H / 2 },
-    // In the full layout both states sit under their component's title. The
-    // compact one has no room above the heat pump's nodes, so its state sits
-    // between them, beside the link.
-    bypassText: { x: 475, y: compact ? 38 : 76 },
-    heatPumpText: compact ? { x: 806, y: (top + bot) / 2 + 4 } : { x: 780, y: 76 },
+    rowLabelDy: compact && tier.exhaust !== tier.outdoor ? 32 : 46,
+    // Without T7 and T8 the link runs from duct to duct.
+    hpLink: tier.hpNodes
+      ? { x: tier.hp, top: top + NODE_H / 2, bottom: bot - NODE_H / 2 }
+      : { x: tier.hp, top, bottom: bot },
+    // Both states sit at the top of their component. The compact layout has no
+    // room above the heat pump's nodes, so there its state sits between them,
+    // beside the link.
+    bypassText: { x: (c1 + c2) / 2, y: compact ? 38 : 76 },
+    heatPumpText: compact && tier.hpNodes
+      ? { x: tier.hp + 26, y: (top + bot) / 2 + 4 }
+      : { x: tier.hp, y: compact ? 38 : 76 },
   };
 }
 
@@ -222,7 +284,12 @@ function pathLength(d) {
   return len;
 }
 
-const LAYOUTS = { full: airFlowLayout(false), compact: airFlowLayout(true) };
+const LAYOUTS = Object.fromEntries(
+  Object.entries(TIERS).map(([name, tier]) => [
+    name,
+    { regular: airFlowLayout(tier, false), compact: airFlowLayout(tier, true) },
+  ])
+);
 
 const DOT_GREY = "#9e9e9e";
 // How many steps a blending run is cut into. The temperature scale bends
@@ -313,14 +380,43 @@ class WgtAirFlowCard extends HTMLElement {
 
   setConfig(config) {
     this._config = { ...config };
-    const layout = config.compact ? LAYOUTS.compact : LAYOUTS.full;
-    if (layout !== this._layout) this._built = false;
-    this._layout = layout;
+    this._pickLayout();
     this._resolved = null;
     this._signature = null;
     this._dotSig = null;
     this._hpSig = null;
     this._phase = this._phase || {};
+  }
+
+  // The tier follows the card's own width, so the card fits a phone, a narrow
+  // column and a panel alike. A custom element is inline by default, and an
+  // inline box has no size to observe.
+  connectedCallback() {
+    this.style.display = "block";
+    this._resizer ??= new ResizeObserver(([entry]) => {
+      this._width = entry.contentRect.width;
+      if (this._config && this._pickLayout() && this._hass) this._render();
+    });
+    this._resizer.observe(this);
+  }
+
+  disconnectedCallback() {
+    this._resizer?.disconnect();
+  }
+
+  // The widest tier whose text still renders at MIN_SCALE, or the full one
+  // until the card has been measured. Returns whether the layout changed,
+  // which needs a rebuild.
+  _pickLayout() {
+    const w = this._width;
+    const name =
+      Object.keys(TIERS).find((n) => !w || TIERS[n].width * MIN_SCALE <= w) || "mini";
+    const compact = this._config.compact || TIERS[name].alwaysCompact;
+    const layout = LAYOUTS[name][compact ? "compact" : "regular"];
+    if (layout === this._layout) return false;
+    this._layout = layout;
+    this._built = false;
+    return true;
   }
 
   set hass(hass) {
@@ -466,6 +562,9 @@ class WgtAirFlowCard extends HTMLElement {
   // Built once. Everything that varies is patched in place by _update, so the
   // running animations are never torn down by an unrelated state change.
   _build() {
+    // a fresh <g> holds no dots, whatever the last signature says
+    this._dotSig = null;
+    this._hpSig = null;
     const L = this._layout;
     const link = L.hpLink;
     const linkD = `M${link.x},${link.top} L${link.x},${link.bottom}`;
@@ -508,13 +607,13 @@ class WgtAirFlowCard extends HTMLElement {
           .wgt-af .node:hover .hit { fill: var(--secondary-text-color); fill-opacity: .1; }
         </style>
         <div class="wrap">
-          <svg viewBox="0 0 1160 ${L.height}" role="img" aria-label="WGT Luftweg mit Temperaturen">
+          <svg viewBox="0 0 ${L.width} ${L.height}" role="img" aria-label="WGT Luftweg mit Temperaturen">
             <rect x="${L.housing.x}" y="${L.housing.y}" width="${L.housing.w}" height="${L.housing.h}"
                   rx="20" class="housing"/>
             ${L.streams.map((s) => `<path d="${s.d}" class="duct"/>`).join("")}
             ${L.components.map(
               (c) => `<rect x="${c.x}" y="${c.y}" width="${c.w}" height="${c.h}" rx="14" class="component"/>
-                ${L.compact ? "" : `<text x="${c.x + c.w / 2}" y="${c.y - 9}" class="component-title">${c.title}</text>`}`
+                ${!L.titles ? "" : `<text x="${c.x + c.w / 2}" y="${c.y - 9}" class="component-title">${c.title}</text>`}`
             ).join("")}
             ${L.streams.map((s) => `<path d="${s.d}" class="line"/>`).join("")}
             <path d="${linkD}" class="line hp-link" data-hp-link/>
@@ -533,7 +632,7 @@ class WgtAirFlowCard extends HTMLElement {
             ${L.coils.map(
               (c) => `<circle cx="${c.x}" cy="${c.y}" r="17" class="coil"/>
                 <text x="${c.x}" y="${c.y + 4}" class="coil-tag">${c.tag}</text>
-                ${L.compact ? "" : `<text x="${c.x}" y="${c.labelY}" class="${c.labelClass}">${c.label}</text>`}`
+                ${!L.coilLabels ? "" : `<text x="${c.x}" y="${c.labelY}" class="${c.labelClass}">${c.label}</text>`}`
             ).join("")}
             <g class="node" data-slot="bypass">
               <rect x="${L.bypassText.x - 70}" y="${L.bypassText.y - 16}" width="140" height="24" class="hit"/>
@@ -551,7 +650,7 @@ class WgtAirFlowCard extends HTMLElement {
                       rx="13" class="ring"/>
                 <text x="${x}" y="${y - 7}" class="tag">${esc(meta.tag)}</text>
                 <text x="${x}" y="${y + 14}" class="val"></text>
-                ${meta.label && !L.compact
+                ${meta.label && L.labels
                   ? `<text x="${x}" y="${y + L.rowLabelDy}" class="label">${esc(meta.label)}</text>`
                   : ""}
               </g>`;
@@ -657,7 +756,7 @@ class WgtAirFlowCard extends HTMLElement {
   }
 
   getCardSize() {
-    return this._layout === LAYOUTS.compact ? 3 : 6;
+    return this._layout.compact ? 3 : 6;
   }
 }
 
