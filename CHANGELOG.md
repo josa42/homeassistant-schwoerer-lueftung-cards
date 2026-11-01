@@ -1,5 +1,30 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **Both cards fit any width.** They are drawn at their own width in px, so the
+  text keeps one size, and they leave out what no longer fits. On a phone the
+  Luftweg card shows T10, T5 and T4, and the room card gives the whole width to
+  the room. [Reference](docs/reference.md#widths) lists the widths.
+- **Compact Luftweg card.** `compact: true`, or Kompakt in the editor, shows
+  the same diagram at about half the height, without the labels under the
+  sensors and the component titles.
+
+### Changed
+
+- **T6 reads "nach WT".** The register list calls it "im WT", but it measures
+  the exhaust air leaving the heat exchanger.
+- **The Nachheizregister is labelled "Nachheizung".** The long name ran over
+  the heat pump's border.
+- **The room card shows the time program in its header**, opposite the room
+  name.
+
+### Fixed
+
+- **T4 sits inside the Luftweg card's housing.** It straddled the right edge.
+
 ## 1.2.0 - 2026-11-01
 
 ### Fixed

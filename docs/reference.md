@@ -65,6 +65,30 @@ unit's `auxiliary_heating_enabled` switch is off, the line reads
 The room name comes from the area, falling back to the thermostat's name with
 the integration's prefix and suffix stripped.
 
+## Widths
+
+Both cards are drawn at their own width in px, so the text keeps one size. A
+card picks the widest form that fits and spreads it over its width. Only below
+the narrowest form does the drawing scale down.
+
+| Luftweg card width | Shows |
+|--------------------|-------|
+| 1160 px and more | everything |
+| 856 to 1159 px | everything but the VHR and NE labels |
+| 748 to 855 px | without T2, T7 and T8; the heat pump is the link between the ducts |
+| 470 to 747 px | T10, T5, T6, T3 and T4, always compact |
+| below 470 px | T10, T5 and T4, always compact; scaled down below 348 px |
+
+`compact: true` applies to every form. The two narrowest are compact anyway,
+because without the labels under the sensors the full height is empty space.
+
+| Room card width | Shows |
+|-----------------|-------|
+| 580 px and more | everything, with Zuluft and Abluft outside the room |
+| below 580 px | the room across the whole width, the Zuluft temperature in front of the auxiliary heater; scaled down below 340 px |
+
+Past 1160 px and 580 px the drawings stop growing and sit centred.
+
 ## Troubleshooting
 
 **The card says no device is selected.** Nothing matched the chosen device.

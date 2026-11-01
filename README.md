@@ -20,7 +20,8 @@ type: custom:wgt-air-flow-card
 device_id: a3f9c2e17b8d4056af21c9e4d7b60385
 ```
 
-It is wide, so give it a section that spans the view:
+It fits any width, but shows every sensor only from 1160 px on, so give it a
+section that spans the view:
 
 ```yaml
 type: sections
@@ -58,16 +59,12 @@ The Luftweg card has one option more, `compact: true` (Kompakt in the editor).
 It shows the same diagram at about half the height, without the labels under
 the sensors and the component titles.
 
-The Luftweg card fits any width on its own. As it gets narrower it squeezes
-the diagram and then leaves out what no longer fits: first T2 and the coil
-temperatures T7 and T8, then the coils, and on a phone everything but T10, T5
-and T4. The two smallest forms are always compact.
-
-The room card fits any width as well. On a phone the room takes the whole
-card, and the Zuluft temperature moves under the duct.
-
-Both cards keep their text at one size at any width. A wider card spreads the
-diagram out rather than enlarging it.
+Both cards fit any width on their own and keep their text at one size. A wider
+card spreads the diagram out rather than enlarging it, and a narrower one
+leaves out what no longer fits. The Luftweg card drops first the coil labels,
+then T2 and the coil temperatures T7 and T8, then the coils, and on a phone
+shows only T10, T5 and T4. On a phone the room card gives the whole width to
+the room. [Reference](docs/reference.md#widths) lists the widths.
 
 <br><br>
 
