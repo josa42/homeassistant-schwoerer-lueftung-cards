@@ -67,12 +67,14 @@ const SLOTS = {
 const NODE_W = 78;
 const NODE_H = 54;
 
-// The card picks the widest tier it can show with text at MIN_SCALE or more of
-// its size. Each tier squeezes the columns and leaves out what no longer fits:
-// first the coil labels, then T2 and the coil temperatures T7 and T8, and on a
-// phone everything but the air entering and leaving the unit. A null column is
+// The card is drawn at its own width in px, so the type keeps one size at any
+// width. It picks the widest tier that fits unstretched and spreads that tier's
+// columns over the card; only below the smallest tier does the drawing scale
+// down. Each tier squeezes the columns and leaves out what no longer fits:
+// first the coil labels, then T2 and the coil temperatures T7 and T8, then the
+// coils, and on a phone everything but the air entering and leaving the unit.
+// A null column is
 // not drawn. The x of a column is the centre of its node.
-const MIN_SCALE = 0.75;
 const TIERS = {
   full: {
     width: 1160, housing: [140, 1020], outdoor: 60, vhr: 210, preheat: 290, exhaust: 290,
@@ -89,17 +91,38 @@ const TIERS = {
     wt: [232, 352, 16], hx: 414, hp: 486, hpNodes: false, ne: 534, supply: 600, end: 702,
     titles: true, labels: true, coilLabels: false,
   },
-  // Abluft and Zuluft are nodes standing in for their terminals here. With so
-  // little left to show the full height is only empty space, so it is always
-  // compact.
+  // Here and in mini, Abluft and Zuluft are nodes standing in for their
+  // terminals. With the row labels gone the full height is only empty space,
+  // so both are always compact. Both sit symmetrically in the housing: the
+  // nodes 11 px outside it on either side, the two components 8 px inside.
+  slim: {
+    width: 470, housing: [104, 372], outdoor: 54, vhr: null, preheat: null, exhaust: 54,
+    wt: [102, 212, 10], hx: 274, hp: 344, hpNodes: false, ne: null, supply: 422, end: 422,
+    titles: false, labels: false, coilLabels: false, alwaysCompact: true,
+  },
   mini: {
-    width: 400, housing: [106, 306], outdoor: 54, vhr: null, preheat: null, exhaust: 54,
-    wt: [130, 250, 16], hx: null, hp: 278, hpNodes: false, ne: null, supply: 350, end: 350,
+    width: 348, housing: [104, 250], outdoor: 54, vhr: null, preheat: null, exhaust: 54,
+    wt: [102, 192, 10], hx: null, hp: 222, hpNodes: false, ne: null, supply: 300, end: 300,
     titles: false, labels: false, coilLabels: false, alwaysCompact: true,
   },
 };
 
-function airFlowLayout(tier, compact) {
+// Spreads a tier's columns over a wider card by the factor k. Only positions
+// move: the nodes, coils and text keep their size.
+function stretchTier(tier, keys, k) {
+  const out = { ...tier };
+  for (const key of keys) {
+    const v = tier[key];
+    out[key] = Array.isArray(v) ? v.map((x) => Math.round(x * k)) : v && Math.round(v * k);
+  }
+  return out;
+}
+
+function airFlowLayout(baseTier, compact, k = 1) {
+  const tier = stretchTier(baseTier, [
+    "width", "housing", "outdoor", "vhr", "preheat", "exhaust", "wt", "hx", "hp", "ne",
+    "supply", "end",
+  ], k);
   const top = compact ? 52 : 110;
   const bot = compact ? 172 : 320;
   const rise = bot - top;
@@ -137,7 +160,7 @@ function airFlowLayout(tier, compact) {
           ? [{ from: "outdoor", d: `M${edge(tier.outdoor)},${top} L${afterVhr},${top}` }]
           : []),
         { from: afterVhr ? "after_preheater" : "outdoor",
-          d: `${afterVhr ? "" : `M${edge(tier.outdoor)},${top} `}L${c1 - 18},${top} ` +
+          d: `${afterVhr ? "" : `M${Math.min(edge(tier.outdoor), c1 - 18)},${top} `}L${c1 - 18},${top} ` +
             `Q${c1},${top} ${round(c1 + ux)},${round(top + uy)} L${c1 + inset},${near}` },
         { from: afterVhr ? "after_preheater" : "outdoor", to: "before_reheater",
           d: `L${c2 - inset},${far}` },
@@ -284,12 +307,6 @@ function pathLength(d) {
   return len;
 }
 
-const LAYOUTS = Object.fromEntries(
-  Object.entries(TIERS).map(([name, tier]) => [
-    name,
-    { regular: airFlowLayout(tier, false), compact: airFlowLayout(tier, true) },
-  ])
-);
 
 const DOT_GREY = "#9e9e9e";
 // How many steps a blending run is cut into. The temperature scale bends
@@ -350,6 +367,17 @@ function esc(s) {
   return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+// Calls back with the element's width whenever it changes, so a card can pick
+// its layout from its own width and fit a phone, a narrow column and a panel
+// alike. A custom element is inline by default, and an inline box has no size
+// to observe.
+function observeWidth(el, callback) {
+  el.style.display = "block";
+  const observer = new ResizeObserver(([entry]) => callback(entry.contentRect.width));
+  observer.observe(el);
+  return observer;
+}
+
 // Forces the HA frontend to load ha-form and the pickers, which are only
 // pulled in once some built-in card editor has been created.
 async function loadHaComponents() {
@@ -388,33 +416,29 @@ class WgtAirFlowCard extends HTMLElement {
     this._phase = this._phase || {};
   }
 
-  // The tier follows the card's own width, so the card fits a phone, a narrow
-  // column and a panel alike. A custom element is inline by default, and an
-  // inline box has no size to observe.
   connectedCallback() {
-    this.style.display = "block";
-    this._resizer ??= new ResizeObserver(([entry]) => {
-      this._width = entry.contentRect.width;
+    this._resizer = observeWidth(this, (width) => {
+      this._width = width;
       if (this._config && this._pickLayout() && this._hass) this._render();
     });
-    this._resizer.observe(this);
   }
 
   disconnectedCallback() {
     this._resizer?.disconnect();
   }
 
-  // The widest tier whose text still renders at MIN_SCALE, or the full one
-  // until the card has been measured. Returns whether the layout changed,
-  // which needs a rebuild.
+  // The widest tier that fits unstretched, spread over the card's width. Past
+  // the full tier's width the drawing stops growing and sits centred. Returns
+  // whether the layout changed, which needs a rebuild.
   _pickLayout() {
-    const w = this._width;
-    const name =
-      Object.keys(TIERS).find((n) => !w || TIERS[n].width * MIN_SCALE <= w) || "mini";
-    const compact = this._config.compact || TIERS[name].alwaysCompact;
-    const layout = LAYOUTS[name][compact ? "compact" : "regular"];
-    if (layout === this._layout) return false;
-    this._layout = layout;
+    const full = TIERS.full.width;
+    const w = Math.round(Math.min(this._width || full, full));
+    const name = Object.keys(TIERS).find((n) => TIERS[n].width <= w) || "mini";
+    const compact = Boolean(this._config.compact || TIERS[name].alwaysCompact);
+    const key = `${name}|${compact}|${w}`;
+    if (key === this._layoutKey) return false;
+    this._layoutKey = key;
+    this._layout = airFlowLayout(TIERS[name], compact, Math.max(1, w / TIERS[name].width));
     this._built = false;
     return true;
   }
@@ -846,27 +870,54 @@ const ROOM_SLOTS = {
   },
 };
 
-// Half the air flow card's viewBox width, because a room card sits in one
-// column of a two-column view while that one spans both. Equal type sizes only
-// render equal if the two cards scale by the same factor.
-const ROOM_W = 580;
 const ROOM_H = 268;
 const ROOM_DUCT_Y = 78;
-const ROOM_BOX = { x: 90, y: 20, w: 400, h: 228 };
-// The room name and the two stream captions share this baseline.
-const ROOM_TITLE_Y = ROOM_BOX.y + 22;
-const ROOM_CAP = { left: 35, right: 545 };
-const ROOM_DUCT = "M41,78 L539,78";
-const ROOM_DUCT_LEN = 498;
-const ROOM_COIL = { x: 140, y: ROOM_DUCT_Y, r: 16 };
 const ROOM_NODE = { w: 92, h: 58 };
-// Centred on the room box: 228 + 352 = 580, twice the box centre of 290. Only
-// possible because the Zusatzheizung text above ends at y=133, clear of the
-// nodes' band, and the time program line moved down to the bottom row.
-const ROOM_NODES = {
-  current_temperature: { x: 228, y: 165, tag: "IST", label: "Raumtemperatur" },
-  climate: { x: 352, y: 165, tag: "SOLL", label: "Solltemperatur" },
+
+// Like the air flow card, the room card is drawn at its own width in px and
+// picks the wider tier that fits unstretched.
+//
+// The full tier is half the air flow card's full width, because a room card
+// sits in one column of a two-column view while that one spans both.
+//
+// The narrow one is for a phone. The terminals and their captions give way to
+// the room box, which takes the whole width. The Zuluft reading stays in front
+// of the auxiliary heater, which is the air it heats, now under its own label,
+// and the heater moves to the centre of the box.
+const ROOM_TIERS = {
+  full: { width: 580, box: [90, 490], caps: [35, 545], coil: 140, nodes: [228, 352],
+    terminals: true },
+  narrow: { width: 340, box: [8, 332], caps: [14, 326], coil: 170, nodes: [112, 228],
+    terminals: false },
 };
+
+function roomLayout(baseTier, k = 1) {
+  const tier = stretchTier(baseTier, ["width", "box", "caps", "coil", "nodes"], k);
+  const box = { x: tier.box[0], y: 20, w: tier.box[1] - tier.box[0], h: 228 };
+  const duct = `M${tier.caps[0] + 6},${ROOM_DUCT_Y} L${tier.caps[1] - 6},${ROOM_DUCT_Y}`;
+  return {
+    width: tier.width,
+    box,
+    // The room name and the two stream captions share this baseline.
+    titleY: box.y + 22,
+    caps: { left: tier.caps[0], right: tier.caps[1] },
+    terminals: tier.terminals,
+    duct,
+    ductLen: pathLength(duct),
+    coil: { x: tier.coil, y: ROOM_DUCT_Y, r: 16 },
+    // Centred on the room box. Only possible because the Zusatzheizung text
+    // above ends at y=133, clear of the nodes' band, and the time program sits
+    // in the header.
+    nodes: {
+      current_temperature: { x: tier.nodes[0], y: 165, tag: "IST", label: "Raumtemperatur" },
+      climate: { x: tier.nodes[1], y: 165, tag: "SOLL", label: "Solltemperatur" },
+    },
+    supplyText: tier.terminals
+      ? { x: tier.caps[0], y: ROOM_DUCT_Y + 38 }
+      : { x: tier.caps[0] + 36, y: ROOM_DUCT_Y + 52, label: ROOM_DUCT_Y + 34 },
+  };
+}
+
 
 class WgtRoomCard extends HTMLElement {
   static SLOTS = ROOM_SLOTS;
@@ -888,10 +939,36 @@ class WgtRoomCard extends HTMLElement {
 
   setConfig(config) {
     this._config = { ...config };
+    this._pickLayout();
     this._resolved = null;
     this._signature = null;
     this._dotSig = null;
     this._phase = this._phase || {};
+  }
+
+  connectedCallback() {
+    this._resizer = observeWidth(this, (width) => {
+      this._width = width;
+      if (this._pickLayout() && this._hass) this._render();
+    });
+  }
+
+  disconnectedCallback() {
+    this._resizer?.disconnect();
+  }
+
+  // The full tier until the card has been measured, as on the air flow card.
+  // Returns whether the layout changed, which needs a rebuild.
+  _pickLayout() {
+    const full = ROOM_TIERS.full.width;
+    const w = Math.round(Math.min(this._width || full, full));
+    const name = full <= w ? "full" : "narrow";
+    const key = `${name}|${w}`;
+    if (key === this._layoutKey) return false;
+    this._layoutKey = key;
+    this._layout = roomLayout(ROOM_TIERS[name], Math.max(1, w / ROOM_TIERS[name].width));
+    this._built = false;
+    return true;
   }
 
   set hass(hass) {
@@ -952,8 +1029,9 @@ class WgtRoomCard extends HTMLElement {
       delete this._phase.room;
       return "";
     }
-    const dur = Number((ROOM_DUCT_LEN / speed).toFixed(2));
-    const count = Math.max(1, Math.round(ROOM_DUCT_LEN / DOT_SPACING));
+    const { duct, ductLen } = this._layout;
+    const dur = Number((ductLen / speed).toFixed(2));
+    const count = Math.max(1, Math.round(ductLen / DOT_SPACING));
     const prev = this._phase.room;
     const f0 = prev ? (((now - prev.t0) / prev.dur + prev.f0) % 1 + 1) % 1 : 0;
     this._phase.room = { t0: now, dur, f0 };
@@ -963,18 +1041,22 @@ class WgtRoomCard extends HTMLElement {
       const begin = `-${(((f0 + i / count) % 1) * dur).toFixed(3)}s`;
       out += `<circle r="4" fill="${color}" class="dot">
         <animateMotion dur="${dur}s" repeatCount="indefinite" calcMode="paced"
-          begin="${begin}" path="${ROOM_DUCT}"/>
+          begin="${begin}" path="${duct}"/>
       </circle>`;
     }
     return out;
   }
 
   _build() {
+    // a fresh <g> holds no dots, whatever the last signature says
+    this._dotSig = null;
+    const L = this._layout;
+    const { box, coil } = L;
     this.innerHTML = `
       <ha-card class="wgt-room">
         <style>
           .wgt-room .wrap { padding: 0; }
-          .wgt-room svg { width: 100%; height: auto; display: block; max-width: ${ROOM_W}px; margin: 0 auto; }
+          .wgt-room svg { width: 100%; height: auto; display: block; max-width: ${L.width}px; margin: 0 auto; }
           .wgt-room .warn { padding: 8px 12px 0; color: var(--warning-color, #ffa726); font-size: 14px; }
           .wgt-room .housing { fill: var(--divider-color); fill-opacity: .12;
                      stroke: var(--secondary-text-color); stroke-width: 1.2;
@@ -1006,38 +1088,44 @@ class WgtRoomCard extends HTMLElement {
           .wgt-room .node:hover .hit { fill: var(--secondary-text-color); fill-opacity: .1; }
         </style>
         <div class="wrap">
-          <svg viewBox="0 0 ${ROOM_W} ${ROOM_H}" role="img" aria-label="Raumzustand">
-            <rect x="${ROOM_BOX.x}" y="${ROOM_BOX.y}" width="${ROOM_BOX.w}"
-                  height="${ROOM_BOX.h}" rx="20" class="housing"/>
-            <text x="${ROOM_BOX.x + 18}" y="${ROOM_TITLE_Y}" class="room-title" data-room-title></text>
+          <svg viewBox="0 0 ${L.width} ${ROOM_H}" role="img" aria-label="Raumzustand">
+            <rect x="${box.x}" y="${box.y}" width="${box.w}"
+                  height="${box.h}" rx="20" class="housing"/>
+            <text x="${box.x + 18}" y="${L.titleY}" class="room-title" data-room-title></text>
 
-            <path d="${ROOM_DUCT}" class="duct"/>
-            <path d="${ROOM_DUCT}" class="line"/>
+            <path d="${L.duct}" class="duct"/>
+            <path d="${L.duct}" class="line"/>
             <g data-dots></g>
 
-            <circle cx="${ROOM_CAP.left}" cy="${ROOM_DUCT_Y}" r="6" class="cap"/>
-            <circle cx="${ROOM_CAP.right}" cy="${ROOM_DUCT_Y}" r="6" class="cap"/>
-            <text x="${ROOM_CAP.left}" y="${ROOM_TITLE_Y}" class="caption">ZULUFT</text>
-            <text x="${ROOM_CAP.right}" y="${ROOM_TITLE_Y}" class="caption">ABLUFT</text>
-            <text x="${ROOM_CAP.left}" y="${ROOM_DUCT_Y + 38}" class="sub" data-supply-air></text>
+            <circle cx="${L.caps.left}" cy="${ROOM_DUCT_Y}" r="6" class="cap"/>
+            <circle cx="${L.caps.right}" cy="${ROOM_DUCT_Y}" r="6" class="cap"/>
+            ${L.terminals
+              ? `<text x="${L.caps.left}" y="${L.titleY}" class="caption">ZULUFT</text>
+                <text x="${L.caps.right}" y="${L.titleY}" class="caption">ABLUFT</text>`
+              : ""}
+            ${L.supplyText.label
+              ? `<text x="${L.supplyText.x}" y="${L.supplyText.label}" class="label">Zuluft</text>`
+              : ""}
+            <text x="${L.supplyText.x}" y="${L.supplyText.y}" class="sub" data-supply-air></text>
 
             <g class="node" data-slot="aux_active">
-              <rect x="${ROOM_COIL.x - 56}" y="${ROOM_COIL.y + 20}" width="112" height="40" class="hit"/>
-              <circle cx="${ROOM_COIL.x}" cy="${ROOM_COIL.y}" r="${ROOM_COIL.r}" class="coil"
+              <rect x="${coil.x - 56}" y="${coil.y + 20}" width="112" height="40" class="hit"/>
+              <circle cx="${coil.x}" cy="${coil.y}" r="${coil.r}" class="coil"
                       data-coil stroke="var(--disabled-text-color, #bdbdbd)"/>
-              <text x="${ROOM_COIL.x}" y="${ROOM_COIL.y + 4}" class="coil-tag">ZH</text>
-              <text x="${ROOM_COIL.x}" y="${ROOM_COIL.y + 34}" class="label">Zusatzheizung</text>
-              <text x="${ROOM_COIL.x}" y="${ROOM_COIL.y + 52}" class="sub" data-aux></text>
+              <text x="${coil.x}" y="${coil.y + 4}" class="coil-tag">ZH</text>
+              <text x="${coil.x}" y="${coil.y + 34}" class="label">Zusatzheizung</text>
+              <text x="${coil.x}" y="${coil.y + 52}" class="sub" data-aux></text>
             </g>
 
+            <!-- a state of the whole room, so it heads the box opposite its name -->
             <g class="node" data-slot="scheduled">
-              <rect x="${ROOM_COIL.x - 56}" y="${ROOM_BOX.y + ROOM_BOX.h - 30}"
-                    width="112" height="22" class="hit"/>
-              <text x="${ROOM_COIL.x}" y="${ROOM_BOX.y + ROOM_BOX.h - 14}"
-                    class="sub" data-scheduled></text>
+              <rect x="${box.x + box.w - 130}" y="${L.titleY - 16}"
+                    width="118" height="22" class="hit"/>
+              <text x="${box.x + box.w - 18}" y="${L.titleY}"
+                    class="sub" style="text-anchor: end" data-scheduled></text>
             </g>
 
-            ${Object.entries(ROOM_NODES).map(
+            ${Object.entries(L.nodes).map(
               ([slot, n]) => `<g class="node" data-slot="${slot}">
                 <rect x="${n.x - ROOM_NODE.w / 2}" y="${n.y - ROOM_NODE.h / 2}"
                       width="${ROOM_NODE.w}" height="${ROOM_NODE.h}" rx="13" class="ring"/>
@@ -1047,8 +1135,8 @@ class WgtRoomCard extends HTMLElement {
               </g>`
             ).join("")}
 
-            <text x="${(ROOM_NODES.current_temperature.x + ROOM_NODES.climate.x) / 2}"
-                  y="${ROOM_BOX.y + ROOM_BOX.h - 14}" class="sub" data-delta></text>
+            <text x="${(L.nodes.current_temperature.x + L.nodes.climate.x) / 2}"
+                  y="${box.y + box.h - 14}" class="sub" data-delta></text>
           </svg>
           <div class="warn" hidden>Kein Raum gewählt – bitte im Karten-Editor ein Raumgerät auswählen.</div>
         </div>

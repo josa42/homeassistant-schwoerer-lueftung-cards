@@ -16,7 +16,7 @@ const geo = await import(
   'data:text/javascript;base64,' +
     Buffer.from(
       src.replace(/customElements\.define\([^)]*\);/g, '') +
-        '\nexport { LAYOUTS, ROOM_DUCT, ROOM_DUCT_LEN, DOT_SPACING };'
+        '\nexport { TIERS, airFlowLayout, ROOM_TIERS, roomLayout, DOT_SPACING };'
     ).toString('base64')
 );
 
@@ -164,7 +164,9 @@ const ROOM = mount(
   ])
 );
 
-const hpLink = geo.LAYOUTS.full.regular.hpLink;
+const airFlow = geo.airFlowLayout(geo.TIERS.full, false);
+const room = geo.roomLayout(geo.ROOM_TIERS.full);
+const hpLink = airFlow.hpLink;
 
 const targets = [
   {
@@ -172,7 +174,7 @@ const targets = [
     card: AIR_FLOW,
     width: 1000,
     scope: 'wgt-af',
-    plans: geo.LAYOUTS.full.regular.streams.map((s) => ({
+    plans: airFlow.streams.map((s) => ({
       path: sampler(s.d),
       len: s.len,
       speed: AIR_FLOW._speed(s.name),
@@ -188,10 +190,10 @@ const targets = [
     scope: 'wgt-room',
     plans: [
       {
-        path: sampler(geo.ROOM_DUCT),
-        len: geo.ROOM_DUCT_LEN,
+        path: sampler(room.duct),
+        len: room.ductLen,
         speed: ROOM._speed(),
-        count: Math.max(1, Math.round(geo.ROOM_DUCT_LEN / geo.DOT_SPACING)),
+        count: Math.max(1, Math.round(room.ductLen / geo.DOT_SPACING)),
         fill: { keyTimes: [0, 1], values: Array(2).fill(ROOM._dotColor('supply_air')) },
       },
     ],

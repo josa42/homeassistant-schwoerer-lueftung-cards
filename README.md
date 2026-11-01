@@ -60,8 +60,14 @@ the sensors and the component titles.
 
 The Luftweg card fits any width on its own. As it gets narrower it squeezes
 the diagram and then leaves out what no longer fits: first T2 and the coil
-temperatures T7 and T8, and on a phone everything but T10, T5 and T4. That
-smallest form is always compact.
+temperatures T7 and T8, then the coils, and on a phone everything but T10, T5
+and T4. The two smallest forms are always compact.
+
+The room card fits any width as well. On a phone the room takes the whole
+card, and the Zuluft temperature moves under the duct.
+
+Both cards keep their text at one size at any width. A wider card spreads the
+diagram out rather than enlarging it.
 
 <br><br>
 
